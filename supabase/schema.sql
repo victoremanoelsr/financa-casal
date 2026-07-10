@@ -1,0 +1,261 @@
+-- FINANÇAS A DOIS - BANCO DE DADOS SUPABASE
+-- Execute este arquivo inteiro no SQL Editor do seu projeto Supabase.
+
+create extension if not exists pgcrypto;
+
+create table if not exists public.households (
+  id uuid primary key default gen_random_uuid(),
+  name text not null default 'Nossa Casa',
+  invite_code text not null unique default upper(substr(md5(random()::text || clock_timestamp()::text), 1, 8)),
+  created_at timestamptz not null default now()
+);
+
+create table if not exists public.profiles (
+  id uuid primary key references auth.users(id) on delete cascade,
+  display_name text,
+  created_at timestamptz not null default now()
+);
+
+create table if not exists public.household_members (
+  household_id uuid not null references public.households(id) on delete cascade,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  role text not null default 'member' check (role in ('owner', 'member')),
+  joined_at timestamptz not null default now(),
+  primary key (household_id, user_id)
+);
+
+create table if not exists public.transactions (
+  id text primary key default gen_random_uuid()::text,
+  household_id uuid not null references public.households(id) on delete cascade,
+  type text not null check (type in ('income', 'expense')),
+  description text not null,
+  amount numeric(14,2) not null check (amount > 0),
+  category text not null,
+  date date not null default current_date,
+  owner text not null default 'Casal',
+  status text not null default 'paid' check (status in ('paid', 'pending')),
+  created_at timestamptz not null default now()
+);
+
+create table if not exists public.bills (
+  id text primary key default gen_random_uuid()::text,
+  household_id uuid not null references public.households(id) on delete cascade,
+  name text not null,
+  amount numeric(14,2) not null check (amount >= 0),
+  due_day integer not null check (due_day between 1 and 31),
+  category text not null,
+  responsible text not null default 'Casal',
+  status text not null default 'pending' check (status in ('paid', 'pending')),
+  recurring boolean not null default true,
+  created_at timestamptz not null default now()
+);
+
+create table if not exists public.cards (
+  id text primary key default gen_random_uuid()::text,
+  household_id uuid not null references public.households(id) on delete cascade,
+  name text not null,
+  brand text not null default 'Outro',
+  limit_amount numeric(14,2) not null check (limit_amount > 0),
+  closing_day integer not null check (closing_day between 1 and 31),
+  due_day integer not null check (due_day between 1 and 31),
+  holder text not null,
+  created_at timestamptz not null default now()
+);
+
+create table if not exists public.card_purchases (
+  id text primary key default gen_random_uuid()::text,
+  household_id uuid not null references public.households(id) on delete cascade,
+  card_id text not null references public.cards(id) on delete cascade,
+  description text not null,
+  amount numeric(14,2) not null check (amount > 0),
+  installments integer not null default 1 check (installments between 1 and 60),
+  purchase_date date not null default current_date,
+  category text not null,
+  created_at timestamptz not null default now()
+);
+
+create table if not exists public.budgets (
+  id text primary key default gen_random_uuid()::text,
+  household_id uuid not null references public.households(id) on delete cascade,
+  category text not null,
+  limit_amount numeric(14,2) not null check (limit_amount > 0),
+  month text not null check (month ~ '^[0-9]{4}-[0-9]{2}$'),
+  created_at timestamptz not null default now(),
+  unique (household_id, category, month)
+);
+
+create table if not exists public.goals (
+  id text primary key default gen_random_uuid()::text,
+  household_id uuid not null references public.households(id) on delete cascade,
+  name text not null,
+  target_amount numeric(14,2) not null check (target_amount > 0),
+  current_amount numeric(14,2) not null default 0 check (current_amount >= 0),
+  target_date date,
+  icon text not null default 'target',
+  created_at timestamptz not null default now()
+);
+
+-- Retorna true quando o usuário autenticado pertence à família informada.
+create or replace function public.is_household_member(p_household_id uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1
+    from public.household_members hm
+    where hm.household_id = p_household_id
+      and hm.user_id = auth.uid()
+  );
+$$;
+
+-- Cria automaticamente um perfil e uma família individual para cada novo cadastro.
+create or replace function public.handle_new_user()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_household_id uuid;
+  v_name text;
+begin
+  v_name := coalesce(new.raw_user_meta_data ->> 'display_name', split_part(new.email, '@', 1));
+
+  insert into public.profiles (id, display_name)
+  values (new.id, v_name)
+  on conflict (id) do nothing;
+
+  insert into public.households (name)
+  values ('Nossa Casa')
+  returning id into v_household_id;
+
+  insert into public.household_members (household_id, user_id, role)
+  values (v_household_id, new.id, 'owner');
+
+  return new;
+end;
+$$;
+
+drop trigger if exists on_auth_user_created on auth.users;
+create trigger on_auth_user_created
+  after insert on auth.users
+  for each row execute procedure public.handle_new_user();
+
+-- Permite que o segundo membro entre na família usando o código de convite.
+create or replace function public.join_household_by_code(p_invite_code text)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_target uuid;
+  v_old uuid;
+begin
+  if auth.uid() is null then
+    raise exception 'Usuário não autenticado';
+  end if;
+
+  select id into v_target
+  from public.households
+  where invite_code = upper(trim(p_invite_code));
+
+  if v_target is null then
+    raise exception 'Código de família inválido';
+  end if;
+
+  select household_id into v_old
+  from public.household_members
+  where user_id = auth.uid()
+  limit 1;
+
+  if v_old = v_target then
+    return;
+  end if;
+
+  delete from public.household_members where user_id = auth.uid();
+  insert into public.household_members (household_id, user_id, role)
+  values (v_target, auth.uid(), 'member');
+
+  if v_old is not null and not exists (
+    select 1 from public.household_members where household_id = v_old
+  ) then
+    delete from public.households where id = v_old;
+  end if;
+end;
+$$;
+
+grant execute on function public.join_household_by_code(text) to authenticated;
+
+-- ROW LEVEL SECURITY
+alter table public.households enable row level security;
+alter table public.profiles enable row level security;
+alter table public.household_members enable row level security;
+alter table public.transactions enable row level security;
+alter table public.bills enable row level security;
+alter table public.cards enable row level security;
+alter table public.card_purchases enable row level security;
+alter table public.budgets enable row level security;
+alter table public.goals enable row level security;
+
+create policy "members can view household"
+on public.households for select to authenticated
+using (public.is_household_member(id));
+
+create policy "members can update household"
+on public.households for update to authenticated
+using (public.is_household_member(id))
+with check (public.is_household_member(id));
+
+create policy "users can view own profile"
+on public.profiles for select to authenticated
+using (id = auth.uid());
+
+create policy "users can update own profile"
+on public.profiles for update to authenticated
+using (id = auth.uid()) with check (id = auth.uid());
+
+create policy "members can view family members"
+on public.household_members for select to authenticated
+using (public.is_household_member(household_id));
+
+-- Políticas comuns para dados financeiros.
+create policy "members select transactions" on public.transactions for select to authenticated using (public.is_household_member(household_id));
+create policy "members insert transactions" on public.transactions for insert to authenticated with check (public.is_household_member(household_id));
+create policy "members update transactions" on public.transactions for update to authenticated using (public.is_household_member(household_id)) with check (public.is_household_member(household_id));
+create policy "members delete transactions" on public.transactions for delete to authenticated using (public.is_household_member(household_id));
+
+create policy "members select bills" on public.bills for select to authenticated using (public.is_household_member(household_id));
+create policy "members insert bills" on public.bills for insert to authenticated with check (public.is_household_member(household_id));
+create policy "members update bills" on public.bills for update to authenticated using (public.is_household_member(household_id)) with check (public.is_household_member(household_id));
+create policy "members delete bills" on public.bills for delete to authenticated using (public.is_household_member(household_id));
+
+create policy "members select cards" on public.cards for select to authenticated using (public.is_household_member(household_id));
+create policy "members insert cards" on public.cards for insert to authenticated with check (public.is_household_member(household_id));
+create policy "members update cards" on public.cards for update to authenticated using (public.is_household_member(household_id)) with check (public.is_household_member(household_id));
+create policy "members delete cards" on public.cards for delete to authenticated using (public.is_household_member(household_id));
+
+create policy "members select purchases" on public.card_purchases for select to authenticated using (public.is_household_member(household_id));
+create policy "members insert purchases" on public.card_purchases for insert to authenticated with check (public.is_household_member(household_id));
+create policy "members update purchases" on public.card_purchases for update to authenticated using (public.is_household_member(household_id)) with check (public.is_household_member(household_id));
+create policy "members delete purchases" on public.card_purchases for delete to authenticated using (public.is_household_member(household_id));
+
+create policy "members select budgets" on public.budgets for select to authenticated using (public.is_household_member(household_id));
+create policy "members insert budgets" on public.budgets for insert to authenticated with check (public.is_household_member(household_id));
+create policy "members update budgets" on public.budgets for update to authenticated using (public.is_household_member(household_id)) with check (public.is_household_member(household_id));
+create policy "members delete budgets" on public.budgets for delete to authenticated using (public.is_household_member(household_id));
+
+create policy "members select goals" on public.goals for select to authenticated using (public.is_household_member(household_id));
+create policy "members insert goals" on public.goals for insert to authenticated with check (public.is_household_member(household_id));
+create policy "members update goals" on public.goals for update to authenticated using (public.is_household_member(household_id)) with check (public.is_household_member(household_id));
+create policy "members delete goals" on public.goals for delete to authenticated using (public.is_household_member(household_id));
+
+-- Índices para as consultas mais frequentes.
+create index if not exists idx_transactions_household_date on public.transactions(household_id, date desc);
+create index if not exists idx_bills_household_due on public.bills(household_id, due_day);
+create index if not exists idx_purchases_household_card on public.card_purchases(household_id, card_id);
+create index if not exists idx_budgets_household_month on public.budgets(household_id, month);
+create index if not exists idx_goals_household on public.goals(household_id);
