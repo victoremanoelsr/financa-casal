@@ -1,0 +1,1 @@
+- [Supabase client-only auth in Vite](supabase-vite-client-only-migration.md) — porting a browser-only Supabase app off Next.js SSR, and safely smoke-testing user-supplied Supabase credentials without printing them.
