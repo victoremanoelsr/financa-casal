@@ -1,12 +1,12 @@
 import { FormEvent, useState } from "react";
-import { ArrowRight, HeartHandshake, LockKeyhole, Mail, WalletCards } from "lucide-react";
+import { ArrowRight, HeartHandshake, LockKeyhole, UserRound, WalletCards } from "lucide-react";
 import { createClient, isSupabaseConfigured } from "@/lib/supabase-client";
+import { nameToAuthEmail, normalizeName, translateAuthError } from "@/lib/username-auth";
 
 export default function LoginScreen() {
   const [mode, setMode] = useState<"login" | "signup">("login");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
   const [name, setName] = useState("");
+  const [password, setPassword] = useState("");
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const configured = isSupabaseConfigured();
@@ -23,21 +23,29 @@ export default function LoginScreen() {
     const supabase = createClient();
     if (!supabase) return;
 
+    const cleanName = normalizeName(name);
+    const authEmail = nameToAuthEmail(cleanName);
+
     setBusy(true);
     if (mode === "login") {
-      const { error } = await supabase.auth.signInWithPassword({ email, password });
-      if (error) setMessage(error.message);
+      const { error } = await supabase.auth.signInWithPassword({ email: authEmail, password });
+      if (error) setMessage(translateAuthError(error.message));
       else window.location.href = "/dashboard";
     } else {
-      const { error } = await supabase.auth.signUp({
-        email,
+      const { data, error } = await supabase.auth.signUp({
+        email: authEmail,
         password,
-        options: {
-          data: { display_name: name },
-          emailRedirectTo: `${window.location.origin}/auth/callback`,
-        },
+        options: { data: { display_name: cleanName } },
       });
-      setMessage(error ? error.message : "Cadastro criado. Verifique seu e-mail para confirmar a conta.");
+      if (error) {
+        setMessage(translateAuthError(error.message));
+      } else if (data.session) {
+        window.location.href = "/dashboard";
+      } else {
+        setMessage(
+          "Conta criada, mas o login automático está desativado. Peça para quem administra o projeto Supabase desligar \"Confirm email\" em Authentication > Sign In / Up > Email, e tente entrar novamente."
+        );
+      }
     }
     setBusy(false);
   }
@@ -73,10 +81,7 @@ export default function LoginScreen() {
           <p className="muted">{mode === "login" ? "Acompanhem o mês e tomem decisões juntos." : "Comecem com sua conta e convidem seu par depois."}</p>
 
           <form onSubmit={submit} className="auth-form">
-            {mode === "signup" && (
-              <label>Seu nome<input value={name} onChange={(e) => setName(e.target.value)} placeholder="Como quer ser chamado(a)?" required /></label>
-            )}
-            <label>E-mail<div className="input-icon"><Mail size={18} /><input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="voce@email.com" required /></div></label>
+            <label>Seu nome<div className="input-icon"><UserRound size={18} /><input value={name} onChange={(e) => setName(e.target.value)} placeholder="Como quer ser chamado(a)?" required /></div></label>
             <label>Senha<div className="input-icon"><LockKeyhole size={18} /><input type="password" minLength={6} value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Mínimo de 6 caracteres" required /></div></label>
             {message && <div className="form-message">{message}</div>}
             <button className="primary-button full" disabled={busy}>
