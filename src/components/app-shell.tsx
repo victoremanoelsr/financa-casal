@@ -87,9 +87,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 }
 
 export function PageHeader({ title, subtitle, action }: { title: string; subtitle: string; action?: React.ReactNode }) {
+  const today = new Intl.DateTimeFormat("pt-BR", { weekday: "long", day: "2-digit", month: "long" }).format(new Date()).toUpperCase();
   return (
     <header className="page-topbar">
-      <div><p>TERÇA-FEIRA, 18 DE AGOSTO</p><h1>{title}</h1><small>{subtitle}</small></div>
+      <div><p>{today}</p><h1>{title}</h1><small>{subtitle}</small></div>
       <div className="page-top-actions">
         {action}
         <button className="icon-button has-badge" aria-label="Avisos"><Bell size={17} /></button>
@@ -100,7 +101,9 @@ export function PageHeader({ title, subtitle, action }: { title: string; subtitl
 }
 
 export function PeriodFilter() {
-  return <div className="period-filter"><button aria-label="Mês anterior">‹</button><span>Agosto <strong>2026</strong></span><button aria-label="Próximo mês">›</button></div>;
+  const now = new Date();
+  const month = new Intl.DateTimeFormat("pt-BR", { month: "long" }).format(now);
+  return <div className="period-filter"><button aria-label="Mês anterior">‹</button><span>{month.charAt(0).toUpperCase() + month.slice(1)} <strong>{now.getFullYear()}</strong></span><button aria-label="Próximo mês">›</button></div>;
 }
 
 export function EmptyState({ icon: Icon = WalletCards, title, description, action }: { icon?: typeof House; title: string; description: string; action?: React.ReactNode }) {
