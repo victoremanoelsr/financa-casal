@@ -13,13 +13,13 @@ const totalCategories = categories.reduce((total, item) => total + item.value, 0
 export default function DashboardPage() {
   return (
     <>
-      <PageHeader title="Olá, VICTOR! 👋" subtitle="Acompanhe como estão as finanças da sua família." />
+      <PageHeader title="Olá! 👋" subtitle="Acompanhe como estão as finanças da sua família." />
       <div className="toolbar"><PeriodFilter /><Link href="/financeiro?novo=1" className="primary-button"><Plus size={16} /> Novo lançamento</Link></div>
 
       <section className="summary-grid" aria-label="Resumo financeiro">
-        <article className="summary-card balance"><div className="summary-icon"><CircleDollarSign /></div><div><small>Saldo atual</small><strong>R$ 8.420,50</strong></div><span className="trend positive">↗ 8,4%</span></article>
-        <article className="summary-card"><div className="summary-icon income"><ArrowDownLeft /></div><div><small>Receitas</small><strong>R$ 12.850,00</strong></div><span className="trend positive">↗ 12%</span></article>
-        <article className="summary-card"><div className="summary-icon expense"><ArrowUpRight /></div><div><small>Despesas</small><strong>R$ 4.429,50</strong></div><span className="trend negative">↘ 3,2%</span></article>
+        <article className="summary-card balance"><div className="summary-icon"><CircleDollarSign /></div><div><small>Saldo atual</small><strong>{formatCurrency(0)}</strong></div></article>
+        <article className="summary-card"><div className="summary-icon income"><ArrowDownLeft /></div><div><small>Receitas</small><strong>{formatCurrency(0)}</strong></div></article>
+        <article className="summary-card"><div className="summary-icon expense"><ArrowUpRight /></div><div><small>Despesas</small><strong>{formatCurrency(0)}</strong></div></article>
       </section>
 
       <section className="dashboard-grid">
@@ -44,7 +44,7 @@ export default function DashboardPage() {
         </article>
 
         <article className="panel category-panel">
-          <div className="panel-heading"><div><h2>Gastos por categoria</h2><p>Agosto de 2026</p></div></div>
+          <div className="panel-heading"><div><h2>Gastos por categoria</h2><p>Nenhum lançamento registrado</p></div></div>
           <div className="donut-wrap">
             <div className="donut"><span><small>Total gasto</small><strong>{formatCurrency(totalCategories)}</strong></span></div>
             <div className="category-legend">{categories.slice(0, 4).map((category) => <p key={category.name}><i style={{ background: category.color }} />{category.name}<strong>{Math.round(category.value / totalCategories * 100)}%</strong></p>)}</div>
@@ -58,9 +58,7 @@ export default function DashboardPage() {
           <div className="category-rows">{categories.slice(0, 4).map((category) => { const percent = category.value / totalCategories * 100; return <div className="category-row" key={category.name}><span className="category-icon" style={{ color: category.color, background: `${category.color}18` }}>●</span><div><p><strong>{category.name}</strong><span>{formatCurrency(category.value)}</span></p><ProgressBar value={percent} color={category.color} /></div><b>{Math.round(percent)}%</b></div>; })}</div>
         </article>
         <article className="panel alerts-panel">
-          <div className="panel-heading"><div><h2>Próximos vencimentos</h2><p>Não deixe nenhuma conta passar</p></div><span className="alert-count">3 avisos</span></div>
-          <div className="alert-item"><span className="alert-icon amber">!</span><div><strong>Energia</strong><small>Vence amanhã · 19/08</small></div><b>R$ 280,00</b></div>
-          <div className="alert-item"><span className="alert-icon blue">▱</span><div><strong>Cartão Principal</strong><small>Fecha amanhã · 19/08</small></div><b>R$ 1.850,00</b></div>
+          <div className="panel-heading"><div><h2>Próximos vencimentos</h2><p>Nenhuma conta cadastrada</p></div><span className="alert-count">0 avisos</span></div>
           <Link href="/contas" className="secondary-button">Ver todas as contas</Link>
         </article>
       </section>

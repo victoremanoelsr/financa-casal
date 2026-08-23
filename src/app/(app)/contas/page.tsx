@@ -10,10 +10,10 @@ import { bills as initialBills } from "@/lib/demo-data";
 import { formatCurrency, formatDate } from "@/lib/format";
 
 const groups = [
-  { name: "Cartões", value: 2610, href: "/cartoes", icon: CreditCard, color: "blue" },
-  { name: "Comércios", value: 620, href: "/comercios", icon: Store, color: "purple" },
-  { name: "Assinaturas", value: 180.7, href: "/assinaturas", icon: Repeat2, color: "green" },
-  { name: "Despesas Fixas", value: 1596.5, href: "/despesas-fixas", icon: Clock3, color: "amber" },
+  { name: "Cartões", value: 0, href: "/cartoes", icon: CreditCard, color: "blue" },
+  { name: "Comércios", value: 0, href: "/comercios", icon: Store, color: "purple" },
+  { name: "Assinaturas", value: 0, href: "/assinaturas", icon: Repeat2, color: "green" },
+  { name: "Despesas Fixas", value: 0, href: "/despesas-fixas", icon: Clock3, color: "amber" },
 ];
 
 export default function BillsPage() {
@@ -34,7 +34,7 @@ export default function BillsPage() {
       <PageHeader title="Contas" subtitle="Tudo o que sua família precisa pagar neste mês, em um só lugar." />
       <div className="toolbar"><PeriodFilter /><span className="sync-note"><Check size={14} /> Valores consolidados sem duplicidade</span></div>
       <section className="bill-overview">
-        <article className="bill-highlight"><small>Total a pagar</small><strong>{formatCurrency(pending)}</strong><p>5 contas neste período</p></article>
+        <article className="bill-highlight"><small>Total a pagar</small><strong>{formatCurrency(pending)}</strong><p>{bills.length} contas neste período</p></article>
         <article><span className="overview-icon amber"><Clock3 /></span><div><small>Pendente</small><strong>{formatCurrency(pending - overdue)}</strong></div></article>
         <article><span className="overview-icon red"><TriangleAlert /></span><div><small>Em atraso</small><strong>{formatCurrency(overdue)}</strong></div></article>
       </section>

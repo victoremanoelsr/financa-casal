@@ -22,7 +22,6 @@ import {
 import { useState } from "react";
 import { Toaster } from "sonner";
 import { cn } from "@/lib/cn";
-import { Modal } from "@/components/ui";
 
 const navigation = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
@@ -61,8 +60,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           })}
         </nav>
         <div className="family-card">
-          <span className="family-avatar">FS</span>
-          <div><small>Família ativa</small><strong>Família Silva</strong></div>
+          <span className="family-avatar">FF</span>
+          <div><small>Família ativa</small><strong>Minha família</strong></div>
           <button aria-label="Trocar família"><ChevronDown size={15} /></button>
         </div>
       </aside>
@@ -83,15 +82,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <button onClick={() => setMenuOpen(true)}><Menu size={20} /><span>Menu</span></button>
       </nav>
       <Toaster position="top-right" richColors closeButton />
-      <AlertsOnEntry />
     </main>
   );
-}
-
-function AlertsOnEntry() {
-  const [open, setOpen] = useState(true);
-  function close() { setOpen(false); }
-  return <Modal open={open} onClose={close} title="Você possui 4 avisos" description="Organizamos os vencimentos e fechamentos mais importantes em uma única janela."><div className="alert-summary-list"><Link href="/cartoes/principal" onClick={close}><span className="alert-icon blue">▱</span><div><strong>Cartão Principal fecha amanhã</strong><small>Fechamento em 19/08/2026</small></div><b>Ver</b></Link><Link href="/contas" onClick={close}><span className="alert-icon amber">!</span><div><strong>Energia vence amanhã</strong><small>R$ 280,00 · vencimento 19/08/2026</small></div><b>Ver</b></Link><Link href="/assinaturas" onClick={close}><span className="alert-icon amber">!</span><div><strong>Plano de celular vence em 2 dias</strong><small>R$ 99,90 · pagamento por PIX</small></div><b>Ver</b></Link><Link href="/despesas-fixas" onClick={close}><span className="alert-icon red">!</span><div><strong>Internet está atrasada</strong><small>Vencimento em 15/08/2026</small></div><b>Ver</b></Link></div><div className="modal-actions"><button className="ghost-button" onClick={close}>Fechar</button><Link className="primary-button" href="/contas" onClick={close}>Ver todas as contas</Link></div></Modal>;
 }
 
 export function PageHeader({ title, subtitle, action }: { title: string; subtitle: string; action?: React.ReactNode }) {
@@ -101,8 +93,7 @@ export function PageHeader({ title, subtitle, action }: { title: string; subtitl
       <div className="page-top-actions">
         {action}
         <button className="icon-button has-badge" aria-label="Avisos"><Bell size={17} /></button>
-        <span className="user-avatar">VS</span>
-        <div className="user-name"><strong>VICTOR SILVA</strong><small>Administrador</small></div>
+        <span className="user-avatar">U</span>
       </div>
     </header>
   );
