@@ -14,7 +14,12 @@ export async function POST(request: Request) {
   if (lookupError || !authEmail) return NextResponse.json({ message: "Usuário ou senha incorretos." }, { status: 401 });
 
   const supabase = await createServerSupabaseClient();
-  const { error } = await supabase.auth.signInWithPassword({ email: String(authEmail), password: parsed.data.password });
+  const { data: signedIn, error } = await supabase.auth.signInWithPassword({ email: String(authEmail), password: parsed.data.password });
   if (error) return NextResponse.json({ message: "Usuário ou senha incorretos." }, { status: 401 });
+  if (signedIn.user) {
+    await admin.auth.admin.updateUserById(signedIn.user.id, {
+      app_metadata: { ...signedIn.user.app_metadata, username: parsed.data.username },
+    });
+  }
   return NextResponse.json({ ok: true });
 }

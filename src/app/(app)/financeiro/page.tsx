@@ -7,14 +7,16 @@ import { PageHeader, PeriodFilter } from "@/components/app-shell";
 import { Field, Modal } from "@/components/ui";
 import { transactions as initialTransactions } from "@/lib/demo-data";
 import { formatCurrency, formatDate, normalizePersonName } from "@/lib/format";
+import { useAccount } from "@/lib/use-account";
 
 export default function FinancePage() {
+  const { data: account } = useAccount();
   const [transactions, setTransactions] = useState(initialTransactions);
   const [filter, setFilter] = useState<"all" | "income" | "expense">("all");
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
   const [initialOpen, setInitialOpen] = useState(false);
-  const [initialBalance, setInitialBalance] = useState(2500);
+  const [initialBalance, setInitialBalance] = useState(0);
   const [type, setType] = useState<"income" | "expense">("expense");
 
   const visible = useMemo(() => transactions.filter((item) => (filter === "all" || item.type === filter) && item.title.toLocaleLowerCase("pt-BR").includes(query.toLocaleLowerCase("pt-BR"))), [filter, query, transactions]);
@@ -39,8 +41,8 @@ export default function FinancePage() {
       <div className="toolbar"><PeriodFilter /><button className="primary-button" onClick={() => setOpen(true)}><Plus size={16} /> Novo lançamento</button></div>
       <section className="summary-grid">
         <article className="summary-card balance"><div className="summary-icon"><CircleDollarSign /></div><div><small>Saldo atual</small><strong>{formatCurrency(initialBalance + income - expenses)}</strong></div><span className="trend positive">Atualizado</span></article>
-        <article className="summary-card"><div className="summary-icon income"><ArrowDownLeft /></div><div><small>Receitas</small><strong>{formatCurrency(income)}</strong></div><span className="trend positive">2 lançamentos</span></article>
-        <article className="summary-card"><div className="summary-icon expense"><ArrowUpRight /></div><div><small>Despesas</small><strong>{formatCurrency(expenses)}</strong></div><span className="trend negative">3 lançamentos</span></article>
+        <article className="summary-card"><div className="summary-icon income"><ArrowDownLeft /></div><div><small>Receitas</small><strong>{formatCurrency(income)}</strong></div><span className="trend positive">{transactions.filter((item) => item.type === "income").length} lançamentos</span></article>
+        <article className="summary-card"><div className="summary-icon expense"><ArrowUpRight /></div><div><small>Despesas</small><strong>{formatCurrency(expenses)}</strong></div><span className="trend negative">{transactions.filter((item) => item.type === "expense").length} lançamentos</span></article>
       </section>
       <article className="initial-balance-banner"><div><span>Saldo inicial</span><strong>{formatCurrency(initialBalance)}</strong><p>Valor que a família já possuía antes de começar a usar o sistema. Não entra como receita do mês.</p></div><button className="secondary-button inline" onClick={() => setInitialOpen(true)}>Editar saldo inicial</button></article>
 
@@ -61,9 +63,9 @@ export default function FinancePage() {
       <Modal open={open} onClose={() => setOpen(false)} title="Novo lançamento" description="Registre uma receita ou despesa sem misturar o saldo inicial.">
         <form className="modal-form" onSubmit={addTransaction}>
           <div className="segmented-control full"><button type="button" className={type === "income" ? "active" : ""} onClick={() => setType("income")}>Receita</button><button type="button" className={type === "expense" ? "active danger" : ""} onClick={() => setType("expense")}>Despesa</button></div>
-          <div className="form-grid two"><Field label="Pessoa da família"><select name="person" required><option>VICTOR SILVA</option><option>EMILY SILVA</option></select></Field><Field label="Categoria"><select name="category" required><option>{type === "income" ? "Salário" : "Alimentação"}</option><option>{type === "income" ? "Renda Extra" : "Moradia"}</option><option>Outros</option></select></Field></div>
+          <div className="form-grid two"><Field label="Pessoa da família"><select name="person" required>{account?.members.map((member) => <option key={member.id}>{member.displayName}</option>)}</select></Field><Field label="Categoria"><select name="category" required>{account?.categories.map((category) => <option key={category.id}>{category.name}</option>)}</select></Field></div>
           <Field label="Descrição"><input name="description" placeholder={type === "income" ? "Ex.: Salário" : "Ex.: Compra do mercado"} required /></Field>
-          <div className="form-grid two"><Field label="Valor"><input name="amount" inputMode="decimal" placeholder="0,00" required /></Field><Field label="Data"><input name="date" type="date" defaultValue="2026-08-18" required /></Field></div>
+          <div className="form-grid two"><Field label="Valor"><input name="amount" inputMode="decimal" placeholder="0,00" required /></Field><Field label="Data"><input name="date" type="date" defaultValue={new Date().toISOString().slice(0, 10)} required /></Field></div>
           <div className="modal-actions"><button type="button" className="ghost-button" onClick={() => setOpen(false)}>Cancelar</button><button className="primary-button">Salvar lançamento</button></div>
         </form>
       </Modal>

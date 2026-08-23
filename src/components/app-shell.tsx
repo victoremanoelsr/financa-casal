@@ -22,6 +22,7 @@ import {
 import { useState } from "react";
 import { Toaster } from "sonner";
 import { cn } from "@/lib/cn";
+import { useAccount } from "@/lib/use-account";
 
 const navigation = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
@@ -39,6 +40,7 @@ const navigation = [
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const [menuOpen, setMenuOpen] = useState(false);
+  const { data } = useAccount();
 
   return (
     <main className="app-shell">
@@ -60,8 +62,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           })}
         </nav>
         <div className="family-card">
-          <span className="family-avatar">FF</span>
-          <div><small>Família ativa</small><strong>Minha família</strong></div>
+          <span className="family-avatar">{data?.family?.name.slice(0, 2).toUpperCase() ?? "FF"}</span>
+          <div><small>Família ativa</small><strong>{data?.family?.name ?? "Nenhuma família"}</strong></div>
           <button aria-label="Trocar família"><ChevronDown size={15} /></button>
         </div>
       </aside>
@@ -87,6 +89,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 }
 
 export function PageHeader({ title, subtitle, action }: { title: string; subtitle: string; action?: React.ReactNode }) {
+  const { data } = useAccount();
+  const initials = (data?.profile.fullName || "U").split(" ").slice(0, 2).map((part) => part[0]).join("");
   const today = new Intl.DateTimeFormat("pt-BR", { weekday: "long", day: "2-digit", month: "long" }).format(new Date()).toUpperCase();
   return (
     <header className="page-topbar">
@@ -94,7 +98,7 @@ export function PageHeader({ title, subtitle, action }: { title: string; subtitl
       <div className="page-top-actions">
         {action}
         <button className="icon-button has-badge" aria-label="Avisos"><Bell size={17} /></button>
-        <span className="user-avatar">U</span>
+        <span className="user-avatar">{initials}</span>
       </div>
     </header>
   );
