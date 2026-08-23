@@ -19,7 +19,7 @@ export async function POST(request: Request) {
   const { data: existing } = await admin.rpc("resolve_login_email", { p_username: input.username });
   if (existing) return NextResponse.json({ message: "Nome de usuário já está em uso." }, { status: 409 });
 
-  const authEmail = `user-${randomUUID()}@auth.financa.invalid`;
+  const authEmail = `user-${randomUUID()}@auth.financa.example.com`;
   const { data: created, error: createError } = await admin.auth.admin.createUser({ email: authEmail, password: input.password, email_confirm: true, app_metadata: { username: input.username } });
   if (createError || !created.user) return NextResponse.json({ message: "Não foi possível criar sua conta. Tente novamente." }, { status: 400 });
 

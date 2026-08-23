@@ -1,7 +1,7 @@
 import { cn } from "@/lib/cn";
 
-export function StatusBadge({ status }: { status: "paid" | "pending" | "overdue" | "active" }) {
-  const labels = { paid: "Pago", pending: "Pendente", overdue: "Atrasado", active: "Ativa" };
+export function StatusBadge({ status }: { status: "paid" | "open" | "pending" | "partial" | "overdue" | "active" }) {
+  const labels = { paid: "Pago", open: "Em aberto", pending: "Pendente", partial: "Parcialmente pago", overdue: "Atrasado", active: "Ativa" };
   return <span className={cn("status-badge", status)}>{labels[status]}</span>;
 }
 

@@ -25,7 +25,7 @@ export async function GET() {
   const familyId = membership?.family_id ?? null;
   const [membersResult, categoriesResult] = familyId ? await Promise.all([
     supabase.from("family_members").select("id,user_id,display_name,role").eq("family_id", familyId).eq("status", "active").order("joined_at"),
-    supabase.from("categories").select("id,name,is_system").or(`family_id.is.null,family_id.eq.${familyId}`).eq("status", "active").order("name"),
+    supabase.from("categories").select("id,name,kind,is_system").or(`family_id.is.null,family_id.eq.${familyId}`).eq("status", "active").order("name"),
   ]) : [{ data: [] }, { data: [] }];
 
   const profile = profileResult.data;
@@ -40,7 +40,7 @@ export async function GET() {
     username,
     family: family && membership ? { id: family.id, name: family.name, joinCode: family.join_code, role: membership.role } : null,
     members: (membersResult.data ?? []).map((member) => ({ id: member.id, displayName: member.display_name, role: member.role, isCurrentUser: member.user_id === userId })),
-    categories: (categoriesResult.data ?? []).map((category) => ({ id: category.id, name: category.name, isSystem: category.is_system })),
+    categories: (categoriesResult.data ?? []).map((category) => ({ id: category.id, name: category.name, kind: category.kind, isSystem: category.is_system })),
   });
 }
 

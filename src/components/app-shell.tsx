@@ -104,10 +104,11 @@ export function PageHeader({ title, subtitle, action }: { title: string; subtitl
   );
 }
 
-export function PeriodFilter() {
-  const now = new Date();
-  const month = new Intl.DateTimeFormat("pt-BR", { month: "long" }).format(now);
-  return <div className="period-filter"><button aria-label="Mês anterior">‹</button><span>{month.charAt(0).toUpperCase() + month.slice(1)} <strong>{now.getFullYear()}</strong></span><button aria-label="Próximo mês">›</button></div>;
+export function PeriodFilter({ value, onChange }: { value?: string; onChange?: (month: string) => void } = {}) {
+  const current = value && /^\d{4}-\d{2}$/.test(value) ? new Date(`${value}-01T12:00:00`) : new Date();
+  const label = new Intl.DateTimeFormat("pt-BR", { month: "long" }).format(current);
+  const move = (offset: number) => { const next = new Date(current); next.setMonth(next.getMonth() + offset); onChange?.(`${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, "0")}`); };
+  return <div className="period-filter"><button aria-label="Mês anterior" onClick={() => move(-1)}>‹</button><span>{label.charAt(0).toUpperCase() + label.slice(1)} <strong>{current.getFullYear()}</strong></span><button aria-label="Próximo mês" onClick={() => move(1)}>›</button></div>;
 }
 
 export function EmptyState({ icon: Icon = WalletCards, title, description, action }: { icon?: typeof House; title: string; description: string; action?: React.ReactNode }) {

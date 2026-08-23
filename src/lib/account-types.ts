@@ -4,5 +4,5 @@ export type AccountSettings = {
   username: string;
   family: { id: string; name: string; joinCode: string; role: "admin" | "member" } | null;
   members: Array<{ id: string; displayName: string; role: "admin" | "member"; isCurrentUser: boolean }>;
-  categories: Array<{ id: string; name: string; isSystem: boolean }>;
+  categories: Array<{ id: string; name: string; kind: "income" | "expense" | "both"; isSystem: boolean }>;
 };

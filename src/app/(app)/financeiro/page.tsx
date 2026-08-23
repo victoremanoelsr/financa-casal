@@ -1,76 +1,499 @@
 "use client";
-
-import { ArrowDownLeft, ArrowUpRight, CircleDollarSign, Plus, Search, SlidersHorizontal } from "lucide-react";
-import { FormEvent, useMemo, useState } from "react";
+import {
+  ArrowDownLeft,
+  ArrowUpRight,
+  CircleDollarSign,
+  Pencil,
+  Plus,
+  Search,
+  SlidersHorizontal,
+  Trash2,
+} from "lucide-react";
+import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { PageHeader, PeriodFilter } from "@/components/app-shell";
 import { Field, Modal } from "@/components/ui";
-import { transactions as initialTransactions } from "@/lib/demo-data";
-import { formatCurrency, formatDate, normalizePersonName } from "@/lib/format";
+import { formatCurrency, formatDate } from "@/lib/format";
 import { useAccount } from "@/lib/use-account";
-
+type Entry = {
+  id: string;
+  title: string;
+  person: string;
+  category: string;
+  date: string;
+  amount: number;
+  type: "income" | "expense";
+  categoryId: string | null;
+  source: "card" | "store" | "direct";
+  editable?: boolean;
+};
+type Card = {
+  id: string;
+  name: string;
+  institution: string;
+  last_four: string | null;
+  card_type: string;
+  holder: string;
+};
+type Store = { id: string; name: string; credit_limit: number };
+type Item = { name: string; quantity: string; unitPrice: string };
 export default function FinancePage() {
   const { data: account } = useAccount();
-  const [transactions, setTransactions] = useState(initialTransactions);
+  const [entries, setEntries] = useState<Entry[]>([]);
+  const [cards, setCards] = useState<Card[]>([]);
+  const [stores, setStores] = useState<Store[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [month, setMonth] = useState(() => new Date().toISOString().slice(0, 7));
+  const [summary, setSummary] = useState({ previousBalance: 0, income: 0, expenses: 0, balance: 0 });
+  const [saving, setSaving] = useState(false);
   const [filter, setFilter] = useState<"all" | "income" | "expense">("all");
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
-  const [initialOpen, setInitialOpen] = useState(false);
-  const [initialBalance, setInitialBalance] = useState(0);
+  const [editing, setEditing] = useState<Entry | null>(null);
   const [type, setType] = useState<"income" | "expense">("expense");
-
-  const visible = useMemo(() => transactions.filter((item) => (filter === "all" || item.type === filter) && item.title.toLocaleLowerCase("pt-BR").includes(query.toLocaleLowerCase("pt-BR"))), [filter, query, transactions]);
-  const income = transactions.filter((item) => item.type === "income").reduce((sum, item) => sum + item.amount, 0);
-  const expenses = transactions.filter((item) => item.type === "expense").reduce((sum, item) => sum + item.amount, 0);
-
-  function addTransaction(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const data = new FormData(event.currentTarget);
-    const amount = Number(String(data.get("amount")).replace(",", "."));
-    if (!amount || amount <= 0) return toast.error("Informe um valor maior que zero.");
-    const title = String(data.get("description") || "").trim();
-    if (!title) return toast.error("Informe uma descrição.");
-    setTransactions((current) => [{ id: crypto.randomUUID(), title, person: normalizePersonName(String(data.get("person"))), category: String(data.get("category")), date: String(data.get("date")), amount, type }, ...current]);
-    setOpen(false);
-    toast.success(type === "income" ? "Receita salva com sucesso." : "Despesa salva com sucesso.");
+  const [categoryId, setCategoryId] = useState("");
+  const [paymentType, setPaymentType] = useState("credit");
+  const [registrationMode, setRegistrationMode] = useState<"detailed" | "total">("total");
+  const [items, setItems] = useState<Item[]>([
+    { name: "", quantity: "1", unitPrice: "" },
+  ]);
+  const load = useCallback(async () => {
+    const response = await fetch(`/api/finance?month=${month}`, { cache: "no-store" });
+    const result = await response.json().catch(() => null);
+    if (response.ok) {
+      setEntries(result.entries ?? []);
+      setCards(result.cards ?? []);
+      setStores(result.stores ?? []);
+      setSummary(result.summary ?? { previousBalance: 0, income: 0, expenses: 0, balance: 0 });
+    }
+    setLoading(false);
+  }, [month]);
+  useEffect(() => {
+    // Carrega os dados persistidos ao abrir o módulo.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void load();
+  }, [load]);
+  const categories = [
+    ...(type === "expense" ? [{ id: "__card", name: "Cartão", kind: "expense" as const, isSystem: true }] : []),
+    ...(account?.categories.filter(
+      (category) => category.kind === type || category.kind === "both",
+    ) ?? []),
+  ];
+  const selectedCategory = categories.find(
+    (category) => category.id === categoryId,
+  );
+  const categoryName = selectedCategory?.name.toLocaleLowerCase("pt-BR") ?? "";
+  const origin =
+    categoryName === "cartão" ||
+    categoryName === "cartoes" ||
+    categoryName === "cartões"
+      ? "card"
+      : categoryName === "comércio" || categoryName === "comercio"
+        ? "store"
+        : "direct";
+  const itemTotal = items.reduce(
+    (sum, item) =>
+      sum + (Number(item.quantity) || 0) * (Number(item.unitPrice) || 0),
+    0,
+  );
+  const visible = useMemo(
+    () =>
+      entries.filter(
+        (item) =>
+          (filter === "all" || item.type === filter) &&
+          item.title.toLowerCase().includes(query.toLowerCase()),
+      ),
+    [entries, filter, query],
+  );
+  function updateItem(index: number, field: keyof Item, value: string) {
+    setItems((current) =>
+      current.map((item, itemIndex) =>
+        itemIndex === index ? { ...item, [field]: value } : item,
+      ),
+    );
   }
-
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setSaving(true);
+    const form = event.currentTarget;
+    const data = new FormData(form);
+    const response = await fetch("/api/finance", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        type,
+        origin,
+        memberId: data.get("memberId"),
+        categoryId,
+        cardId: data.get("cardId"),
+        storeId: data.get("storeId"),
+        paymentType,
+        installmentCount: origin === "store" ? 1 : data.get("installmentCount"),
+        registrationMode,
+        description: data.get("description"),
+        amount: data.get("amount"),
+        date: data.get("date"),
+        items,
+      }),
+    });
+    const result = await response.json().catch(() => null);
+    setSaving(false);
+    if (!response.ok)
+      return toast.error(result?.message ?? "Não foi possível salvar.");
+    form.reset();
+    setItems([{ name: "", quantity: "1", unitPrice: "" }]);
+    setCategoryId("");
+    setOpen(false);
+    await load();
+    toast.success("Lançamento salvo e relacionado com sucesso.");
+  }
+  async function editEntry(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!editing) return;
+    const values = new FormData(event.currentTarget);
+    setSaving(true);
+    const response = await fetch(`/api/finance/${editing.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ description: values.get("description"), amount: values.get("amount"), date: values.get("date"), categoryId: editing.source === "card" ? editing.categoryId : values.get("categoryId") }) });
+    const result = await response.json().catch(() => null);
+    setSaving(false);
+    if (!response.ok) return toast.error(result?.message ?? "Não foi possível editar.");
+    setEditing(null); await load(); toast.success("Lançamento atualizado.");
+  }
+  async function deleteEntry(item: Entry) {
+    if (!window.confirm(`Excluir o lançamento “${item.title}”?`)) return;
+    const response = await fetch(`/api/finance/${item.id}`, { method: "DELETE" });
+    const result = await response.json().catch(() => null);
+    if (!response.ok) return toast.error(result?.message ?? "Não foi possível excluir.");
+    await load(); toast.success("Lançamento excluído.");
+  }
   return (
     <>
-      <PageHeader title="Financeiro" subtitle="Registre e acompanhe todas as receitas e despesas da família." />
-      <div className="toolbar"><PeriodFilter /><button className="primary-button" onClick={() => setOpen(true)}><Plus size={16} /> Novo lançamento</button></div>
+      <PageHeader
+        title="Financeiro"
+        subtitle="Registre e acompanhe todas as receitas e despesas da família."
+      />
+      <div className="toolbar">
+        <PeriodFilter value={month} onChange={setMonth} />
+        <button className="primary-button" onClick={() => setOpen(true)}>
+          <Plus size={16} /> Novo lançamento
+        </button>
+      </div>
       <section className="summary-grid">
-        <article className="summary-card balance"><div className="summary-icon"><CircleDollarSign /></div><div><small>Saldo atual</small><strong>{formatCurrency(initialBalance + income - expenses)}</strong></div><span className="trend positive">Atualizado</span></article>
-        <article className="summary-card"><div className="summary-icon income"><ArrowDownLeft /></div><div><small>Receitas</small><strong>{formatCurrency(income)}</strong></div><span className="trend positive">{transactions.filter((item) => item.type === "income").length} lançamentos</span></article>
-        <article className="summary-card"><div className="summary-icon expense"><ArrowUpRight /></div><div><small>Despesas</small><strong>{formatCurrency(expenses)}</strong></div><span className="trend negative">{transactions.filter((item) => item.type === "expense").length} lançamentos</span></article>
+        <article className="summary-card balance">
+          <div className="summary-icon">
+            <CircleDollarSign />
+          </div>
+          <div>
+            <small>Saldo atual</small>
+            <strong>{formatCurrency(summary.balance)}</strong>
+          </div>
+          <span className="trend positive">Atualizado</span>
+        </article>
+        <article className="summary-card">
+          <div className="summary-icon income">
+            <ArrowDownLeft />
+          </div>
+          <div>
+            <small>Receitas</small>
+            <strong>{formatCurrency(summary.income)}</strong>
+          </div>
+          <span className="trend positive">
+            Recebidas no período
+          </span>
+        </article>
+        <article className="summary-card">
+          <div className="summary-icon expense">
+            <ArrowUpRight />
+          </div>
+          <div>
+            <small>Despesas</small>
+            <strong>{formatCurrency(summary.expenses)}</strong>
+          </div>
+          <span className="trend negative">
+            {entries.filter((entry) => entry.type === "expense").length} lançamentos
+          </span>
+        </article>
       </section>
-      <article className="initial-balance-banner"><div><span>Saldo inicial</span><strong>{formatCurrency(initialBalance)}</strong><p>Valor que a família já possuía antes de começar a usar o sistema. Não entra como receita do mês.</p></div><button className="secondary-button inline" onClick={() => setInitialOpen(true)}>Editar saldo inicial</button></article>
-
       <section className="panel list-panel module-section">
         <div className="list-toolbar">
           <div className="segmented-control">
-            <button className={filter === "all" ? "active" : ""} onClick={() => setFilter("all")}>Todos</button>
-            <button className={filter === "income" ? "active" : ""} onClick={() => setFilter("income")}>Receitas</button>
-            <button className={filter === "expense" ? "active" : ""} onClick={() => setFilter("expense")}>Despesas</button>
+            <button
+              className={filter === "all" ? "active" : ""}
+              onClick={() => setFilter("all")}
+            >
+              Todos
+            </button>
+            <button
+              className={filter === "income" ? "active" : ""}
+              onClick={() => setFilter("income")}
+            >
+              Receitas
+            </button>
+            <button
+              className={filter === "expense" ? "active" : ""}
+              onClick={() => setFilter("expense")}
+            >
+              Despesas
+            </button>
           </div>
-          <div className="search-box"><Search size={15} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar lançamento" /><button aria-label="Mais filtros"><SlidersHorizontal size={15} /></button></div>
+          <div className="search-box">
+            <Search size={15} />
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Buscar lançamento"
+            />
+            <button>
+              <SlidersHorizontal size={15} />
+            </button>
+          </div>
         </div>
         <div className="transaction-list">
-          {visible.map((item) => <article className="transaction-item" key={item.id}><span className={item.type === "income" ? "transaction-icon income" : "transaction-icon expense"}>{item.type === "income" ? <ArrowDownLeft /> : <ArrowUpRight />}</span><div><strong>{item.title}</strong><small>{item.person} · {item.category}</small></div><time>{formatDate(item.date)}</time><b className={item.type}>{item.type === "income" ? "+ " : "− "}{formatCurrency(item.amount)}</b><button aria-label={`Opções de ${item.title}`}>•••</button></article>)}
+          {loading ? (
+            <p>Carregando...</p>
+          ) : visible.length === 0 ? (
+            <p>Nenhum lançamento encontrado.</p>
+          ) : (
+            visible.map((item) => (
+              <article className="transaction-item" key={item.id}>
+                <span className={`transaction-icon ${item.type}`}>
+                  {item.type === "income" ? (
+                    <ArrowDownLeft />
+                  ) : (
+                    <ArrowUpRight />
+                  )}
+                </span>
+                <div>
+                  <strong>{item.title}</strong>
+                  <small>{item.person}</small>
+                </div>
+                <span className="transaction-category">{item.category}</span>
+                <time>{formatDate(item.date)}</time>
+                <b className={item.type}>
+                  {item.type === "income" ? "+ " : "− "}
+                  {formatCurrency(item.amount)}
+                </b>
+                {item.editable !== false && <span className="row-actions"><button type="button" onClick={() => setEditing(item)} aria-label="Editar lançamento"><Pencil size={14} /></button><button type="button" onClick={() => void deleteEntry(item)} aria-label="Excluir lançamento"><Trash2 size={14} /></button></span>}
+              </article>
+            ))
+          )}
         </div>
       </section>
-
-      <Modal open={open} onClose={() => setOpen(false)} title="Novo lançamento" description="Registre uma receita ou despesa sem misturar o saldo inicial.">
-        <form className="modal-form" onSubmit={addTransaction}>
-          <div className="segmented-control full"><button type="button" className={type === "income" ? "active" : ""} onClick={() => setType("income")}>Receita</button><button type="button" className={type === "expense" ? "active danger" : ""} onClick={() => setType("expense")}>Despesa</button></div>
-          <div className="form-grid two"><Field label="Pessoa da família"><select name="person" required>{account?.members.map((member) => <option key={member.id}>{member.displayName}</option>)}</select></Field><Field label="Categoria"><select name="category" required>{account?.categories.map((category) => <option key={category.id}>{category.name}</option>)}</select></Field></div>
-          <Field label="Descrição"><input name="description" placeholder={type === "income" ? "Ex.: Salário" : "Ex.: Compra do mercado"} required /></Field>
-          <div className="form-grid two"><Field label="Valor"><input name="amount" inputMode="decimal" placeholder="0,00" required /></Field><Field label="Data"><input name="date" type="date" defaultValue={new Date().toISOString().slice(0, 10)} required /></Field></div>
-          <div className="modal-actions"><button type="button" className="ghost-button" onClick={() => setOpen(false)}>Cancelar</button><button className="primary-button">Salvar lançamento</button></div>
+      <Modal
+        open={open}
+        onClose={() => setOpen(false)}
+        title="Novo lançamento"
+        description="A categoria define o fluxo correto da despesa."
+      >
+        <form className="modal-form" onSubmit={submit}>
+          <div className="segmented-control full">
+            <button
+              type="button"
+              className={type === "income" ? "active" : ""}
+              onClick={() => {
+                setType("income");
+                setCategoryId("");
+              }}
+            >
+              Receita
+            </button>
+            <button
+              type="button"
+              className={type === "expense" ? "active danger" : ""}
+              onClick={() => {
+                setType("expense");
+                setCategoryId("");
+              }}
+            >
+              Despesa
+            </button>
+          </div>
+          <div className="form-grid two">
+            <Field label="Pessoa que realizou">
+              <select name="memberId" required>
+                <option value="">Selecione</option>
+                {account?.members.map((m) => (
+                  <option value={m.id} key={m.id}>
+                    {m.displayName}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Field
+              label={
+                type === "income"
+                  ? "Categoria da receita"
+                  : "Categoria da despesa"
+              }
+            >
+              <select
+                value={categoryId}
+                onChange={(e) => { setCategoryId(e.target.value); setRegistrationMode("total"); setPaymentType("credit"); setItems([{ name: "", quantity: "1", unitPrice: "" }]); }}
+                required
+              >
+                <option value="">Selecione</option>
+                {categories.map((c) => (
+                  <option value={c.id} key={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+            </Field>
+          </div>
+          {origin === "card" && (
+            <>
+              <div className="form-grid two">
+                <Field label="Cartão">
+                  <select name="cardId" required>
+                    <option value="">Selecione o cartão</option>
+                    {cards.map((c) => (
+                      <option value={c.id} key={c.id}>
+                        {c.institution} • final {c.last_four} • {c.holder}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+                <Field label="Pagamento">
+                  <select
+                    value={paymentType}
+                    onChange={(e) => setPaymentType(e.target.value)}
+                  >
+                    <option value="credit">Crédito</option>
+                    <option value="debit">Débito</option>
+                  </select>
+                </Field>
+              </div>
+              {paymentType === "credit" && (
+                <Field label="Parcelas">
+                  <input
+                    name="installmentCount"
+                    type="number"
+                    min="1"
+                    max="48"
+                    defaultValue="1"
+                    required
+                  />
+                </Field>
+              )}
+            </>
+          )}
+          {origin === "store" && (
+            <>
+              <Field label="Comércio">
+                <select name="storeId" required>
+                  <option value="">Selecione o comércio</option>
+                  {stores.map((s) => (
+                    <option value={s.id} key={s.id}>
+                      {s.name}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+            </>
+          )}
+          {origin !== "direct" && <div className="purchase-mode"><span>Como deseja registrar esta compra?</span><div className="segmented-control full"><button type="button" className={registrationMode === "detailed" ? "active" : ""} onClick={() => setRegistrationMode("detailed")}>Detalhar itens</button><button type="button" className={registrationMode === "total" ? "active" : ""} onClick={() => setRegistrationMode("total")}>Somente valor total</button></div></div>}
+          {origin !== "direct" && registrationMode === "detailed" && (
+            <div className="purchase-items">
+              <strong>Itens da compra</strong>
+              {items.map((item, index) => (
+                <div className="form-grid purchase-item-row" key={index}>
+                  <input
+                    value={item.name}
+                    onChange={(e) => updateItem(index, "name", e.target.value)}
+                    placeholder="Nome do item"
+                    required
+                  />
+                  <strong className="item-subtotal">{formatCurrency((Number(item.quantity) || 0) * (Number(item.unitPrice) || 0))}</strong>
+                  <input
+                    value={item.quantity}
+                    onChange={(e) =>
+                      updateItem(index, "quantity", e.target.value)
+                    }
+                    type="number"
+                    min="0.001"
+                    step="0.001"
+                    placeholder="Qtd."
+                    required
+                  />
+                  <input
+                    value={item.unitPrice}
+                    onChange={(e) =>
+                      updateItem(index, "unitPrice", e.target.value)
+                    }
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    placeholder="Valor unitário"
+                    required
+                  />
+                  <button
+                    type="button"
+                    className="ghost-button"
+                    onClick={() =>
+                      setItems((current) =>
+                        current.filter((_, i) => i !== index),
+                      )
+                    }
+                  >
+                    <Trash2 size={15} />
+                  </button>
+                </div>
+              ))}
+              <button
+                type="button"
+                className="secondary-button inline"
+                onClick={() =>
+                  setItems((current) => [
+                    ...current,
+                    { name: "", quantity: "1", unitPrice: "" },
+                  ])
+                }
+              >
+                <Plus size={14} /> Adicionar item
+              </button>
+              <p className="installment-preview">
+                <span>Total da compra</span>
+                <strong>{formatCurrency(itemTotal)}</strong>
+              </p>
+            </div>
+          )}
+          <Field label="Descrição da compra">
+            <input name="description" required />
+          </Field>
+          {(origin === "direct" || registrationMode === "total") && (
+            <Field label={origin === "direct" ? "Valor" : "Valor total da compra"}>
+              <input
+                name="amount"
+                type="number"
+                min="0.01"
+                step="0.01"
+                required
+              />
+            </Field>
+          )}
+          <Field label="Data">
+            <input
+              name="date"
+              type="date"
+              defaultValue={new Date().toISOString().slice(0, 10)}
+              required
+            />
+          </Field>
+          <div className="modal-actions">
+            <button
+              type="button"
+              className="ghost-button"
+              onClick={() => setOpen(false)}
+            >
+              Cancelar
+            </button>
+            <button className="primary-button" disabled={saving}>
+              {saving ? "Salvando..." : "Salvar lançamento"}
+            </button>
+          </div>
         </form>
       </Modal>
-      <Modal open={initialOpen} onClose={() => setInitialOpen(false)} title="Saldo inicial" description="Este valor altera o saldo disponível, mas nunca será somado às receitas do período.">
-        <form className="modal-form" onSubmit={(event) => { event.preventDefault(); const value = Number(new FormData(event.currentTarget).get("initialBalance")); if (value < 0) return toast.error("O saldo inicial não pode ser negativo nesta versão."); setInitialBalance(value); setInitialOpen(false); toast.success("Saldo inicial atualizado."); }}><Field label="Valor disponível ao começar"><input name="initialBalance" type="number" min="0" step="0.01" defaultValue={initialBalance} required /></Field><div className="modal-actions"><button type="button" className="ghost-button" onClick={() => setInitialOpen(false)}>Cancelar</button><button className="primary-button">Salvar saldo</button></div></form>
+      <Modal open={Boolean(editing)} onClose={() => setEditing(null)} title="Editar lançamento" description="A alteração será aplicada ao histórico relacionado.">
+        {editing && <form className="modal-form" onSubmit={editEntry}><Field label="Descrição"><input name="description" defaultValue={editing.title} required /></Field><div className="form-grid two"><Field label="Valor"><input name="amount" type="number" min="0.01" step="0.01" defaultValue={editing.amount} required /></Field><Field label="Data"><input name="date" type="date" defaultValue={editing.date} required /></Field></div><Field label="Categoria"><select name="categoryId" defaultValue={editing.categoryId ?? ""} disabled={editing.source === "card"}>{editing.source === "card" && <option value={editing.categoryId ?? ""}>Cartões</option>}{editing.source !== "card" && <><option value="">Sem categoria</option>{account?.categories.filter((category) => category.kind === editing.type || category.kind === "both").map((category) => <option value={category.id} key={category.id}>{category.name}</option>)}</>}</select></Field><div className="modal-actions"><button type="button" className="ghost-button" onClick={() => setEditing(null)}>Cancelar</button><button className="primary-button" disabled={saving}>{saving ? "Salvando..." : "Salvar alterações"}</button></div></form>}
       </Modal>
     </>
   );
