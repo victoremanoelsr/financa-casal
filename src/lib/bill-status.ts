@@ -38,9 +38,10 @@ export function getCardCycle(purchaseDate: string, closingDay: number, dueDay: n
 
 export function calculateCardStatus(closingDate: string, dueDate: string, remaining: number, today = formatCivilDate(new Date())): BillStatus {
   if (remaining <= 0) return "paid";
-  if (today < closingDate) return "open";
-  if (today <= dueDate) return "pending";
-  return "overdue";
+  if (today > dueDate) return "overdue";
+  const daysUntilDue = calendarDaysBetween(today, dueDate);
+  if (daysUntilDue <= 10) return "pending";
+  return "open";
 }
 
 export function monthLabel(value: string) {

@@ -20,6 +20,6 @@ export const viewport: Viewport = {
   colorScheme: "light",
 };
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return <html lang="pt-BR"><body>{children}<PwaRegister /></body></html>;
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { getBillStatus, normalizePersonName, normalizeUsername, splitInstallments } from "./format";
+import { generateCsv, getBillStatus, normalizePersonName, normalizeUsername, splitInstallments } from "./format";
 
 describe("normalização de identidade", () => {
   it("armazena nomes de pessoas em maiúsculas mesmo quando digitados em minúsculas", () => {
@@ -29,3 +29,22 @@ describe("status de vencimento", () => {
   it("marca vencimento passado como atrasado", () => expect(getBillStatus("2026-08-17", null, today)).toBe("overdue"));
   it("mantém vencimento futuro pendente", () => expect(getBillStatus("2026-08-19", null, today)).toBe("pending"));
 });
+
+describe("geração de CSV para exportação", () => {
+  it("gera arquivo CSV com BOM UTF-8 e delimitador ponto-e-vírgula", () => {
+    const data = [
+      { id: "1", description: "Supermercado", amount: 150.5, date: "2026-09-01" },
+      { id: "2", description: "Salário", amount: 3500.0, date: "2026-09-05" },
+    ];
+    const csv = generateCsv(data, [
+      { key: "date", header: "Data" },
+      { key: "description", header: "Descrição" },
+      { key: "amount", header: "Valor", format: (v) => `R$ ${Number(v).toFixed(2).replace(".", ",")}` },
+    ]);
+    expect(csv.startsWith("\uFEFF")).toBe(true);
+    expect(csv).toContain('"Data";"Descrição";"Valor"');
+    expect(csv).toContain('"2026-09-01";"Supermercado";"R$ 150,50"');
+    expect(csv).toContain('"2026-09-05";"Salário";"R$ 3500,00"');
+  });
+});
+
