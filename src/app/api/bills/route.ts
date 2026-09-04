@@ -18,6 +18,147 @@ export async function GET(request: Request) {
   const userId = claims?.claims?.sub ? String(claims.claims.sub) : null;
   if (!userId)
     return NextResponse.json({ message: "Não autorizado." }, { status: 401 });
+  const demoMode = (request.headers.get("cookie") ?? "").includes("financa_demo=1");
+  if (demoMode) {
+    const requestedMonth = new URL(request.url).searchParams.get("month") ?? new Date().toISOString().slice(0, 7);
+    return NextResponse.json({
+      bills: [
+        {
+          id: "demo-b1",
+          type: "store",
+          sourceId: "s1",
+          name: "Farmácia São João",
+          origin: "Comércio",
+          originalDate: "2026-08-18",
+          dueDate: "2026-08-25",
+          amount: 500,
+          originalAmount: 500,
+          paid: 200,
+          remaining: 300,
+          status: "overdue",
+          payments: [],
+          purchases: [],
+          originMonth: "Agosto de 2026",
+          carried: true,
+        },
+        {
+          id: "demo-b2",
+          type: "fixed",
+          sourceId: "f2",
+          name: "Energia Elétrica",
+          origin: "Contas da casa",
+          originalDate: "2026-08-01",
+          dueDate: "2026-08-30",
+          amount: 120.50,
+          originalAmount: 120.50,
+          paid: 0,
+          remaining: 120.50,
+          status: "pending",
+          payments: [],
+          purchases: [],
+          originMonth: "Agosto de 2026",
+          carried: true,
+        },
+        {
+          id: "demo-b3",
+          type: "card",
+          sourceId: "c1",
+          name: "Nubank",
+          origin: "Cartão",
+          originalDate: `${requestedMonth}-01`,
+          dueDate: `${requestedMonth}-10`,
+          amount: 1000,
+          originalAmount: 1000,
+          paid: 500,
+          remaining: 500,
+          status: "pending",
+          payments: [],
+          purchases: [],
+          originMonth: "Setembro de 2026",
+          carried: false,
+        },
+        {
+          id: "demo-b4",
+          type: "card",
+          sourceId: "c2",
+          name: "Cartão Atacadão",
+          origin: "Cartão",
+          originalDate: `${requestedMonth}-01`,
+          dueDate: `${requestedMonth}-05`,
+          amount: 850,
+          originalAmount: 850,
+          paid: 300,
+          remaining: 550,
+          status: "overdue",
+          payments: [],
+          purchases: [],
+          originMonth: "Setembro de 2026",
+          carried: false,
+        },
+        {
+          id: "demo-b5",
+          type: "fixed",
+          sourceId: "f3",
+          name: "Água",
+          origin: "Contas da casa",
+          originalDate: `${requestedMonth}-01`,
+          dueDate: `${requestedMonth}-12`,
+          amount: 85.40,
+          originalAmount: 85.40,
+          paid: 0,
+          remaining: 85.40,
+          status: "open",
+          payments: [],
+          purchases: [],
+          originMonth: "Setembro de 2026",
+          carried: false,
+        },
+        {
+          id: "demo-b6",
+          type: "fixed",
+          sourceId: "f4",
+          name: "Internet Vivo",
+          origin: "Contas da casa",
+          originalDate: `${requestedMonth}-01`,
+          dueDate: `${requestedMonth}-15`,
+          amount: 119.90,
+          originalAmount: 119.90,
+          paid: 0,
+          remaining: 119.90,
+          status: "open",
+          payments: [],
+          purchases: [],
+          originMonth: "Setembro de 2026",
+          carried: false,
+        },
+        {
+          id: "demo-b7",
+          type: "housing",
+          sourceId: "f1",
+          name: "Aluguel",
+          origin: "Moradia",
+          originalDate: `${requestedMonth}-01`,
+          dueDate: `${requestedMonth}-05`,
+          amount: 950,
+          originalAmount: 950,
+          paid: 0,
+          remaining: 950,
+          status: "overdue",
+          payments: [],
+          purchases: [],
+          originMonth: "Setembro de 2026",
+          carried: false,
+        },
+      ],
+      groups: {
+        cards: 1050,
+        stores: 300,
+        subscriptions: 0,
+        fixed: 1275.80,
+      },
+    });
+  }
+
   const { data: membership } = await supabase
     .from("family_members")
     .select("family_id")
@@ -73,7 +214,7 @@ export async function GET(request: Request) {
       .eq("card_purchases.status", "active"),
     supabase
       .from("fixed_expenses")
-      .select("id,name,reference_amount,due_day,status")
+      .select("id,name,reference_amount,due_day,status,category_id,categories(name)")
       .eq("family_id", membership.family_id)
       .eq("status", "active"),
     supabase
@@ -309,17 +450,44 @@ export async function GET(request: Request) {
     const last = new Date(year, month, 0).getDate();
     return `${currentMonth}-${String(Math.min(day, last)).padStart(2, "0")}`;
   };
-  // Assinaturas são apenas informativas e nunca geram contas financeiras.
-  const subscriptionBills: never[] = [];
-  const fixedBills = (fixedResult.data ?? []).map((item) => {
+  // Assinaturas pagas via PIX/Dinheiro/Outro entram em Contas a pagar. Assinaturas em Cartão de Crédito NÃO entram para não duplicar a fatura.
+  const { data: activeSubs } = await supabase
+    .from("subscriptions")
+    .select("id,name,amount,due_day,payment_method,status")
+    .eq("family_id", membership.family_id)
+    .eq("status", "active")
+    .neq("payment_method", "card");
+
+  const subscriptionBills = (activeSubs ?? []).map((item) => {
     const dueDate = dueDateFor(item.due_day);
     return enrich(
       {
-        id: `fixed-${item.id}-${currentMonth}`,
-        type: "fixed" as const,
+        id: `subscription-${item.id}-${currentMonth}`,
+        type: "subscription" as const,
         sourceId: item.id,
         name: item.name,
-        origin: "Despesa fixa",
+        origin: "Assinatura (PIX)",
+        originalDate: `${currentMonth}-01`,
+        dueDate,
+        amount: Number(item.amount),
+        purchases: [],
+      },
+      (remaining) => recurringStatus(dueDate, remaining),
+    );
+  });
+  const fixedBills = (fixedResult.data ?? []).map((item) => {
+    const dueDate = dueDateFor(item.due_day);
+    const catName = Array.isArray(item.categories)
+      ? item.categories[0]?.name
+      : (item.categories as { name?: string } | null)?.name;
+    const isHousing = catName?.toLowerCase().includes("moradia") || item.name.toLowerCase().includes("aluguel") || item.name.toLowerCase().includes("condomínio");
+    return enrich(
+      {
+        id: `fixed-${item.id}-${currentMonth}`,
+        type: (isHousing ? "housing" : "fixed") as "fixed",
+        sourceId: item.id,
+        name: item.name,
+        origin: catName || "Contas da casa",
         originalDate: `${currentMonth}-01`,
         dueDate,
         amount: Number(item.reference_amount),

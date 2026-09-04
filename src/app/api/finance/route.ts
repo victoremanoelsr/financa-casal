@@ -38,12 +38,104 @@ const installments = (amount: number, count: number) => {
 };
 
 export async function GET(request: Request) {
+  const demoMode = (request.headers.get("cookie") ?? "").includes("financa_demo=1");
+  const requestedMonth = new URL(request.url).searchParams.get("month") ?? new Date().toISOString().slice(0, 7);
+  if (demoMode) {
+    return NextResponse.json({
+      entries: [
+        {
+          id: "demo-e1",
+          type: "income",
+          title: "Salário Principal",
+          amount: 5200,
+          date: `${requestedMonth}-01`,
+          category: "Salário",
+          categoryId: "cat-1",
+          person: "Victor",
+          source: "direct",
+          sourceId: null,
+          recordType: "original",
+          editable: true,
+        },
+        {
+          id: "demo-e2",
+          type: "income",
+          title: "Renda Extra Freelance",
+          amount: 1200,
+          date: `${requestedMonth}-08`,
+          category: "Renda extra",
+          categoryId: "cat-2",
+          person: "Emilly",
+          source: "direct",
+          sourceId: null,
+          recordType: "original",
+          editable: true,
+        },
+        {
+          id: "demo-e3",
+          type: "expense",
+          title: "Supermercado Atacadão",
+          amount: 650.40,
+          date: `${requestedMonth}-04`,
+          category: "Alimentação",
+          categoryId: "cat-3",
+          person: "Família",
+          source: "direct",
+          sourceId: null,
+          recordType: "original",
+          editable: true,
+        },
+        {
+          id: "demo-e4",
+          type: "expense",
+          title: "Aluguel Apartamento",
+          amount: 950,
+          date: `${requestedMonth}-05`,
+          category: "Moradia",
+          categoryId: "cat-4",
+          person: "Victor",
+          source: "direct",
+          sourceId: null,
+          recordType: "original",
+          editable: true,
+        },
+        {
+          id: "demo-e5",
+          type: "expense",
+          title: "Farmácia São João",
+          amount: 145.80,
+          date: `${requestedMonth}-03`,
+          category: "Saúde",
+          categoryId: "cat-5",
+          person: "Emilly",
+          source: "direct",
+          sourceId: null,
+          recordType: "original",
+          editable: true,
+        },
+      ],
+      summary: {
+        income: 6400,
+        expenses: 1746.20,
+        previousBalance: 1450,
+        balance: 6103.80,
+      },
+      cards: [
+        { id: "c1", name: "Nubank", institution: "Nu Pagamentos", last_four: "1234", card_type: "credit", holder: "Victor" },
+        { id: "c2", name: "Cartão Atacadão", institution: "Banco CSF", last_four: "5225", card_type: "credit", holder: "Emilly" },
+      ],
+      stores: [
+        { id: "s1", name: "Farmácia São João", credit_limit: 1000 },
+        { id: "s2", name: "Supermercado Alvorada", credit_limit: 1500 },
+      ],
+    });
+  }
+
   const { supabase, userId, membership } = await context();
   if (!userId)
     return NextResponse.json({ message: "Não autorizado." }, { status: 401 });
   if (!membership)
     return NextResponse.json({ entries: [], cards: [], stores: [] });
-  const requestedMonth = new URL(request.url).searchParams.get("month");
   const month = /^\d{4}-\d{2}$/.test(requestedMonth ?? "")
     ? requestedMonth!
     : new Date().toISOString().slice(0, 7);

@@ -40,6 +40,41 @@ export async function GET(request: Request) {
   const month = /^\d{4}-\d{2}$/.test(requestedMonth ?? "")
     ? requestedMonth!
     : formatCivilDate(new Date()).slice(0, 7);
+  const demoMode = (request.headers.get("cookie") ?? "").includes("financa_demo=1");
+  if (demoMode) {
+    return NextResponse.json({
+      userName: "Victor",
+      income: 6400,
+      expenses: 3890,
+      previousBalance: 1450,
+      balance: 3960,
+      cashFlow: [
+        { label: "01/09", receitas: 5200, despesas: 1450 },
+        { label: "05/09", receitas: 5200, despesas: 2350 },
+        { label: "10/09", receitas: 6400, despesas: 3100 },
+        { label: "15/09", receitas: 6400, despesas: 3890 },
+      ],
+      categories: [
+        { name: "Moradia", value: 1650, color: "#00c882" },
+        { name: "Alimentação", value: 1420, color: "#0f8b8d" },
+        { name: "Cartões", value: 1850, color: "#3b82f6" },
+        { name: "Transporte", value: 680, color: "#8b5cf6" },
+        { name: "Contas da casa", value: 490, color: "#f59e0b" },
+      ],
+      upcoming: [
+        { id: "up-1", title: "Cartão Atacadão", origin: "Cartão", dueDate: `${month}-05`, remaining: 850, href: "/cartoes" },
+        { id: "up-2", title: "Nubank", origin: "Cartão", dueDate: `${month}-10`, remaining: 1000, href: "/cartoes" },
+        { id: "up-3", title: "Água", origin: "Contas da casa", dueDate: `${month}-12`, remaining: 85.40, href: "/contas" },
+        { id: "up-4", title: "Internet Vivo Fibra", origin: "Contas da casa", dueDate: `${month}-15`, remaining: 119.90, href: "/contas" },
+      ],
+      movements: [
+        { id: "mov-1", type: "income", title: "Salário Principal", subtitle: "Salário", origin: "Financeiro", amount: 5200, date: `${month}-01`, href: "/financeiro" },
+        { id: "mov-2", type: "expense", title: "Aluguel Apartamento", subtitle: "Moradia", origin: "Financeiro", amount: 950, date: `${month}-05`, href: "/financeiro" },
+        { id: "mov-3", type: "expense", title: "Supermercado Atacadão", subtitle: "Alimentação", origin: "Financeiro", amount: 650.40, date: `${month}-04`, href: "/financeiro" },
+      ],
+    });
+  }
+
   const { data: membership } = await supabase
     .from("family_members")
     .select("family_id")

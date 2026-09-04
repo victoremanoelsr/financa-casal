@@ -23,10 +23,11 @@ export function calendarDaysBetween(from: string, to: string) {
 
 export function calculateStoreStatus(originalDate: string, remaining: number, today = formatCivilDate(new Date())): BillStatus {
   if (remaining <= 0) return "paid";
-  const days = calendarDaysBetween(originalDate, today);
-  if (days < 20) return "open";
-  if (days <= 30) return "pending";
-  return "overdue";
+  const dueDate = addCivilDays(originalDate, 30);
+  if (today > dueDate) return "overdue";
+  const daysUntilDue = calendarDaysBetween(today, dueDate);
+  if (daysUntilDue <= 10) return "pending";
+  return "open";
 }
 
 export function getCardCycle(purchaseDate: string, closingDay: number, dueDay: number) {

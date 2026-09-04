@@ -20,10 +20,80 @@ const relationName = (value: unknown) =>
   } | null;
 
 export async function GET(request: Request) {
+  const demoMode = (request.headers.get("cookie") ?? "").includes("financa_demo=1");
+  if (demoMode) {
+    return NextResponse.json({
+      subscriptions: [
+        {
+          id: "demo-sub1",
+          name: "Netflix",
+          category: "Entretenimento",
+          amount: 44.90,
+          dueDay: 15,
+          frequency: "monthly",
+          paymentMethod: "card",
+          card: "Atacadão",
+          cardLastFour: "5225",
+          status: "active",
+          createdAt: "2026-09-01T12:00:00.000Z",
+        },
+        {
+          id: "demo-sub2",
+          name: "Spotify",
+          category: "Música",
+          amount: 21.90,
+          dueDay: 8,
+          frequency: "monthly",
+          paymentMethod: "pix",
+          status: "active",
+          createdAt: "2026-09-01T12:00:00.000Z",
+        },
+        {
+          id: "demo-sub3",
+          name: "Prime Video",
+          category: "Entretenimento",
+          amount: 19.90,
+          dueDay: 20,
+          frequency: "monthly",
+          paymentMethod: "card",
+          card: "Mercado Pago",
+          cardLastFour: "0802",
+          status: "active",
+          createdAt: "2026-09-05T12:00:00.000Z",
+        },
+        {
+          id: "demo-sub4",
+          name: "YouTube Premium",
+          category: "Entretenimento",
+          amount: 16.90,
+          dueDay: 25,
+          frequency: "monthly",
+          paymentMethod: "pix",
+          status: "active",
+          createdAt: "2026-09-02T12:00:00.000Z",
+        },
+        {
+          id: "demo-sub5",
+          name: "HBO Max",
+          category: "Entretenimento",
+          amount: 39.90,
+          dueDay: 30,
+          frequency: "monthly",
+          paymentMethod: "card",
+          card: "Nubank",
+          cardLastFour: "1234",
+          status: "active",
+          createdAt: "2026-09-03T12:00:00.000Z",
+        },
+      ],
+    });
+  }
+
   const { supabase, userId, familyId } = await getFamilyContext();
   if (!userId)
     return NextResponse.json({ message: "Não autorizado." }, { status: 401 });
   if (!familyId) return NextResponse.json({ subscriptions: [] });
+
   const requestedMonth =
     new URL(request.url).searchParams.get("month") ??
     new Date().toISOString().slice(0, 7);
