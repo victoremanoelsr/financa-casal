@@ -326,6 +326,7 @@ create table public.subscriptions (
   status text not null default 'active' check (status in ('active','paused','archived')), created_by uuid references auth.users(id), created_at timestamptz not null default now(), updated_at timestamptz not null default now(),
   check ((payment_method = 'card' and card_id is not null) or payment_method <> 'card')
 );
+alter table public.subscriptions add column if not exists image_url text;
 
 create table public.subscription_occurrences (
   id uuid primary key default gen_random_uuid(), family_id uuid not null references public.families(id) on delete restrict, subscription_id uuid not null references public.subscriptions(id) on delete restrict,

@@ -11,7 +11,7 @@ import {
 } from "lucide-react";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { PageHeader, PeriodFilter } from "@/components/app-shell";
+import { PageHeader } from "@/components/app-shell";
 import { Field, Modal } from "@/components/ui";
 import { formatCurrency, formatDate } from "@/lib/format";
 import { useAccount } from "@/lib/use-account";
@@ -53,6 +53,7 @@ export default function FinancePage() {
   const [type, setType] = useState<"income" | "expense">("expense");
   const [categoryId, setCategoryId] = useState("");
   const [paymentType, setPaymentType] = useState("credit");
+  const [selectedCardId, setSelectedCardId] = useState("");
   const [registrationMode, setRegistrationMode] = useState<"detailed" | "total">("total");
   const [items, setItems] = useState<Item[]>([
     { name: "", quantity: "1", unitPrice: "" },
@@ -73,12 +74,11 @@ export default function FinancePage() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void load();
   }, [load]);
-  const categories = [
-    ...(type === "expense" ? [{ id: "__card", name: "Cartão", kind: "expense" as const, isSystem: true }] : []),
-    ...(account?.categories.filter(
-      (category) => category.kind === type || category.kind === "both",
-    ) ?? []),
-  ];
+  const incomeNames = new Set(["Salário", "Investimentos", "Renda Extra", "Outros"]);
+  const expenseNames = new Set(["Alimentação", "Comércio", "Cartão", "Moradia", "Saúde", "Transporte", "Educação", "Lazer", "Água", "Energia", "Internet", "Celular", "Assinaturas", "Compras", "Outros"]);
+  const categories = type === "income"
+    ? (account?.categories.filter((category) => incomeNames.has(category.name)) ?? [])
+    : [{ id: "__card", name: "Cartão", kind: "expense" as const, isSystem: true }, ...(account?.categories.filter((category) => expenseNames.has(category.name) && category.name !== "Cartão") ?? [])];
   const selectedCategory = categories.find(
     (category) => category.id === categoryId,
   );
@@ -91,6 +91,7 @@ export default function FinancePage() {
       : categoryName === "comércio" || categoryName === "comercio"
         ? "store"
         : "direct";
+  const selectedCard = cards.find((card) => card.id === selectedCardId);
   const itemTotal = items.reduce(
     (sum, item) =>
       sum + (Number(item.quantity) || 0) * (Number(item.unitPrice) || 0),
@@ -143,6 +144,7 @@ export default function FinancePage() {
     form.reset();
     setItems([{ name: "", quantity: "1", unitPrice: "" }]);
     setCategoryId("");
+    setSelectedCardId("");
     setOpen(false);
     await load();
     toast.success("Lançamento salvo e relacionado com sucesso.");
@@ -171,19 +173,21 @@ export default function FinancePage() {
         title="Financeiro"
         subtitle="Registre e acompanhe todas as receitas e despesas da família."
       />
-      <div className="toolbar">
-        <PeriodFilter value={month} onChange={setMonth} />
+      <div className="toolbar finance-toolbar">
+        <label className="finance-period">Período
+          <input type="month" value={month} onChange={(event) => setMonth(event.target.value)} />
+        </label>
         <button className="primary-button" onClick={() => setOpen(true)}>
           <Plus size={16} /> Novo lançamento
         </button>
       </div>
-      <section className="summary-grid">
+      <section className="summary-grid finance-summary">
         <article className="summary-card balance">
           <div className="summary-icon">
             <CircleDollarSign />
           </div>
           <div>
-            <small>Saldo atual</small>
+            <small>Saldo</small>
             <strong>{formatCurrency(summary.balance)}</strong>
           </div>
           <span className="trend positive">Atualizado</span>
@@ -193,7 +197,7 @@ export default function FinancePage() {
             <ArrowDownLeft />
           </div>
           <div>
-            <small>Receitas</small>
+            <small>Entradas</small>
             <strong>{formatCurrency(summary.income)}</strong>
           </div>
           <span className="trend positive">
@@ -205,7 +209,7 @@ export default function FinancePage() {
             <ArrowUpRight />
           </div>
           <div>
-            <small>Despesas</small>
+            <small>Saídas</small>
             <strong>{formatCurrency(summary.expenses)}</strong>
           </div>
           <span className="trend negative">
@@ -281,8 +285,8 @@ export default function FinancePage() {
       <Modal
         open={open}
         onClose={() => setOpen(false)}
-        title="Novo lançamento"
-        description="A categoria define o fluxo correto da despesa."
+        title={type === "income" ? "Nova receita" : "Nova despesa"}
+        description={type === "income" ? "Registre uma entrada de dinheiro." : origin === "card" ? "Registre seu gasto no cartão de crédito." : origin === "store" ? "Registre seus gastos em comércios ou crediários." : "Registre seu gasto de forma rápida."}
       >
         <form className="modal-form" onSubmit={submit}>
           <div className="segmented-control full">
@@ -308,8 +312,8 @@ export default function FinancePage() {
             </button>
           </div>
           <div className="form-grid two">
-            <Field label="Pessoa que realizou">
-              <select name="memberId" required>
+            <Field label={type === "income" ? "De quem é esta receita?" : "Quem realizou este gasto?"}>
+              <select name="memberId" defaultValue={account?.members.find((member) => member.isCurrentUser)?.id ?? ""} required>
                 <option value="">Selecione</option>
                 {account?.members.map((m) => (
                   <option value={m.id} key={m.id}>
@@ -318,32 +322,18 @@ export default function FinancePage() {
                 ))}
               </select>
             </Field>
-            <Field
-              label={
-                type === "income"
-                  ? "Categoria da receita"
-                  : "Categoria da despesa"
-              }
-            >
-              <select
-                value={categoryId}
-                onChange={(e) => { setCategoryId(e.target.value); setRegistrationMode("total"); setPaymentType("credit"); setItems([{ name: "", quantity: "1", unitPrice: "" }]); }}
-                required
-              >
-                <option value="">Selecione</option>
-                {categories.map((c) => (
-                  <option value={c.id} key={c.id}>
-                    {c.name}
-                  </option>
-                ))}
-              </select>
+            <Field label={type === "income" ? "Categoria da receita" : "Categoria da despesa"}>
+              <div className="finance-category-grid" role="group" aria-label="Categorias">
+                {categories.map((c) => <button type="button" key={c.id} className={categoryId === c.id ? "selected" : ""} onClick={() => { setCategoryId(c.id); setRegistrationMode("total"); setPaymentType("credit"); setItems([{ name: "", quantity: "1", unitPrice: "" }]); }}><CircleDollarSign size={15}/><span>{c.name === "Comércio" ? "Comércio / Crediário" : c.name}</span></button>)}
+              </div>
+              <input type="hidden" name="categoryId" value={categoryId} required />
             </Field>
           </div>
           {origin === "card" && (
             <>
               <div className="form-grid two">
                 <Field label="Cartão">
-                  <select name="cardId" required>
+                  <select name="cardId" value={selectedCardId} onChange={(event) => { setSelectedCardId(event.target.value); const card = cards.find((item) => item.id === event.target.value); if (card?.card_type === "debit") setPaymentType("debit"); }} required>
                     <option value="">Selecione o cartão</option>
                     {cards.map((c) => (
                       <option value={c.id} key={c.id}>
@@ -352,14 +342,8 @@ export default function FinancePage() {
                     ))}
                   </select>
                 </Field>
-                <Field label="Pagamento">
-                  <select
-                    value={paymentType}
-                    onChange={(e) => setPaymentType(e.target.value)}
-                  >
-                    <option value="credit">Crédito</option>
-                    <option value="debit">Débito</option>
-                  </select>
+                  <Field label="Forma de pagamento">
+                  <div className="finance-choice-grid"><button type="button" className={paymentType === "credit" ? "selected" : ""} onClick={() => setPaymentType("credit")}>Crédito</button><button type="button" className={paymentType === "debit" ? "selected" : ""} onClick={() => setPaymentType("debit")}>Débito</button></div>
                 </Field>
               </div>
               {paymentType === "credit" && (
@@ -374,6 +358,7 @@ export default function FinancePage() {
                   />
                 </Field>
               )}
+              {selectedCard?.card_type === "debit" && <p className="field-hint">Este cartão é de débito; a saída será registrada imediatamente.</p>}
             </>
           )}
           {origin === "store" && (
@@ -456,8 +441,8 @@ export default function FinancePage() {
               </p>
             </div>
           )}
-          <Field label="Descrição da compra">
-            <input name="description" required />
+          <Field label={`Descrição${origin === "direct" ? " (opcional)" : " da compra (opcional)"}`}>
+            <input name="description" />
           </Field>
           {(origin === "direct" || registrationMode === "total") && (
             <Field label={origin === "direct" ? "Valor" : "Valor total da compra"}>

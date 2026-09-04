@@ -96,7 +96,7 @@ export default function CardsPage() {
       <div className="toolbar">
         <PeriodFilter />
         <button className="primary-button" onClick={() => setOpen(true)}>
-          <Plus size={16} /> Adicionar cartão
+          <Plus size={16} /> Novo cartão
         </button>
       </div>
       {loading ? (

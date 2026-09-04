@@ -44,36 +44,52 @@ export async function GET(request: Request) {
   if (!membership)
     return NextResponse.json({ entries: [], cards: [], stores: [] });
   const requestedMonth = new URL(request.url).searchParams.get("month");
-  const month = /^\d{4}-\d{2}$/.test(requestedMonth ?? "") ? requestedMonth! : new Date().toISOString().slice(0, 7);
-  const [entries, cards, stores, cardPurchases] = await Promise.all([
-    supabase
-      .from("financial_entries")
-      .select(
-        "id,kind,description,amount,competence_date,category_id,categories(name),family_members!financial_entries_responsible_member_id_fkey(display_name)",
-      )
-      .eq("family_id", membership.family_id)
-      .eq("status", "posted")
-      .in("kind", ["income", "expense", "initial_balance"])
-      .order("competence_date", { ascending: false }),
-    supabase
-      .from("cards")
-      .select("id,name,institution,last_four,card_type,family_members!cards_holder_member_id_fkey(display_name)")
-      .eq("family_id", membership.family_id)
-      .eq("status", "active")
-      .order("name"),
-    supabase
-      .from("stores")
-      .select("id,name,credit_limit")
-      .eq("family_id", membership.family_id)
-      .eq("status", "active")
-      .order("name"),
-    supabase
-      .from("card_purchases")
-      .select("id,card_id,description,total_amount,purchase_date,category_id")
-      .eq("family_id", membership.family_id)
-      .eq("status", "active"),
-  ]);
-  if (entries.error || cards.error || stores.error || cardPurchases.error)
+  const month = /^\d{4}-\d{2}$/.test(requestedMonth ?? "")
+    ? requestedMonth!
+    : new Date().toISOString().slice(0, 7);
+  const [entries, cards, stores, cardPurchases, paymentEvents] =
+    await Promise.all([
+      supabase
+        .from("financial_entries")
+        .select(
+          "id,kind,description,amount,competence_date,category_id,categories(name),family_members!financial_entries_responsible_member_id_fkey(display_name)",
+        )
+        .eq("family_id", membership.family_id)
+        .eq("status", "posted")
+        .in("kind", ["income", "expense", "initial_balance"])
+        .order("competence_date", { ascending: false }),
+      supabase
+        .from("cards")
+        .select(
+          "id,name,institution,last_four,card_type,family_members!cards_holder_member_id_fkey(display_name)",
+        )
+        .eq("family_id", membership.family_id)
+        .eq("status", "active")
+        .order("name"),
+      supabase
+        .from("stores")
+        .select("id,name,credit_limit")
+        .eq("family_id", membership.family_id)
+        .eq("status", "active")
+        .order("name"),
+      supabase
+        .from("card_purchases")
+        .select("id,card_id,description,total_amount,purchase_date,category_id,source_type,payment_type")
+        .eq("family_id", membership.family_id)
+        .eq("status", "active"),
+      supabase
+        .from("audit_events")
+        .select("id,event_type,metadata")
+        .eq("family_id", membership.family_id)
+        .in("event_type", ["bill_payment_recorded", "bill_payment_reversed"]),
+    ]);
+  if (
+    entries.error ||
+    cards.error ||
+    stores.error ||
+    cardPurchases.error ||
+    paymentEvents.error
+  )
     return NextResponse.json(
       { message: "Não foi possível carregar o financeiro." },
       { status: 500 },
@@ -81,36 +97,119 @@ export async function GET(request: Request) {
   const entryIds = (entries.data ?? []).map((entry) => entry.id);
   const [{ data: cardLinks }, { data: storeLinks }] = entryIds.length
     ? await Promise.all([
-        supabase.from("card_installments").select("entry_id,purchase_id").in("entry_id", entryIds),
-        supabase.from("store_installments").select("entry_id,purchase_id").in("entry_id", entryIds),
+        supabase
+          .from("card_installments")
+          .select("entry_id,purchase_id")
+          .in("entry_id", entryIds),
+        supabase
+          .from("store_installments")
+          .select("entry_id,purchase_id")
+          .in("entry_id", entryIds),
       ])
     : [{ data: [] }, { data: [] }];
-  const cardByEntry = new Map((cardLinks ?? []).map((link) => [link.entry_id, link.purchase_id]));
-  const storeByEntry = new Map((storeLinks ?? []).map((link) => [link.entry_id, link.purchase_id]));
-  const originalEntries = (entries.data ?? []).filter((entry) => (entry.kind === "income" || entry.kind === "expense") && !cardByEntry.has(entry.id)).map((entry) => ({
-    id: entry.id,
-    type: entry.kind,
-    title: entry.description,
-    amount: Number(entry.amount),
-    date: entry.competence_date,
-    category: storeByEntry.has(entry.id) ? "Comércios" : relationName(entry.categories, "name") || "Sem categoria",
-    categoryId: entry.category_id,
-    person: relationName(entry.family_members, "display_name") || "Família",
-    source: storeByEntry.has(entry.id) ? "store" : "direct",
-    sourceId: storeByEntry.get(entry.id) ?? null,
-    recordType: "original" as const,
-    editable: true,
-  }));
-  const cardOriginalEntries = (cardPurchases.data ?? []).map((purchase) => ({ id: purchase.id, type: "expense" as const, title: purchase.description, amount: Number(purchase.total_amount), date: purchase.purchase_date, category: "Cartões", categoryId: purchase.category_id, person: "Família", source: "card" as const, sourceId: purchase.card_id, recordType: "original" as const, editable: false }));
+  const cardByEntry = new Map(
+    (cardLinks ?? []).map((link) => [link.entry_id, link.purchase_id]),
+  );
+  const storeByEntry = new Map(
+    (storeLinks ?? []).map((link) => [link.entry_id, link.purchase_id]),
+  );
+  const cardTypes = new Map(
+    (cards.data ?? []).map((card) => [card.id, card.card_type]),
+  );
+  const cardPurchaseTypes = new Map(
+    (cardPurchases.data ?? []).map((purchase) => [
+      purchase.id,
+      purchase.payment_type ?? cardTypes.get(purchase.card_id),
+    ]),
+  );
+  const debitCardEntries = new Set(
+    (cardLinks ?? [])
+      .filter((link) => cardPurchaseTypes.get(link.purchase_id) === "debit")
+      .map((link) => link.entry_id),
+  );
+  const originalEntries = (entries.data ?? [])
+    .filter(
+      (entry) =>
+        (entry.kind === "income" || entry.kind === "expense") &&
+        (!cardByEntry.has(entry.id) || debitCardEntries.has(entry.id)),
+    )
+    .map((entry) => ({
+      id: entry.id,
+      type: entry.kind,
+      title: entry.description,
+      amount: Number(entry.amount),
+      date: entry.competence_date,
+      category: storeByEntry.has(entry.id)
+        ? "Comércios"
+        : relationName(entry.categories, "name") || "Sem categoria",
+      categoryId: entry.category_id,
+      person: relationName(entry.family_members, "display_name") || "Família",
+      source: storeByEntry.has(entry.id) ? "store" : "direct",
+      sourceId: storeByEntry.get(entry.id) ?? null,
+      recordType: "original" as const,
+      editable: true,
+    }));
+  const cardOriginalEntries = (cardPurchases.data ?? [])
+    .filter((purchase) => cardPurchaseTypes.get(purchase.id) !== "debit" && purchase.source_type !== "account_transfer")
+    .map((purchase) => ({
+      id: purchase.id,
+      type: "expense" as const,
+      title: purchase.description,
+      amount: Number(purchase.total_amount),
+      date: purchase.purchase_date,
+      category: "Cartões",
+      categoryId: purchase.category_id,
+      person: "Família",
+      source: "card" as const,
+      sourceId: purchase.card_id,
+      recordType: "original" as const,
+      editable: false,
+    }));
+  const reversed = new Set(
+    (paymentEvents.data ?? [])
+      .filter((event) => event.event_type === "bill_payment_reversed")
+      .map((event) =>
+        Number((event.metadata as { paymentEventId?: number }).paymentEventId),
+      ),
+  );
   const summaryRows = [
-    ...(entries.data ?? []).filter((entry) => !cardByEntry.has(entry.id)).map((entry) => ({ type: entry.kind as "income" | "expense" | "initial_balance", amount: Number(entry.amount), date: entry.competence_date })),
-    ...(cardPurchases.data ?? []).map((purchase) => ({ type: "expense" as const, amount: Number(purchase.total_amount), date: purchase.purchase_date })),
+    ...(entries.data ?? [])
+      .filter(
+        (entry) => !cardByEntry.has(entry.id) || debitCardEntries.has(entry.id),
+      )
+      .map((entry) => ({
+        type: entry.kind as "income" | "expense" | "initial_balance",
+        amount: Number(entry.amount),
+        date: entry.competence_date,
+      })),
+    ...(paymentEvents.data ?? [])
+      .filter(
+        (event) =>
+          event.event_type === "bill_payment_recorded" &&
+          !reversed.has(Number(event.id)) && (event.metadata as { method?: string }).method !== "credit",
+      )
+      .map((event) => {
+        const metadata = event.metadata as {
+          amount?: number;
+          paymentDate?: string;
+        };
+        return {
+          type: "expense" as const,
+          amount: Number(metadata.amount ?? 0),
+          date: metadata.paymentDate ?? "",
+        };
+      }),
   ];
   const summary = monthlyFinancialSummary(summaryRows, month);
   return NextResponse.json({
-    entries: [...originalEntries, ...cardOriginalEntries].filter((entry) => entry.date.startsWith(month)).sort((a, b) => b.date.localeCompare(a.date)),
+    entries: [...originalEntries, ...cardOriginalEntries]
+      .filter((entry) => entry.date.startsWith(month))
+      .sort((a, b) => b.date.localeCompare(a.date)),
     summary,
-    cards: (cards.data ?? []).map((card) => ({ ...card, holder: relationName(card.family_members, "display_name") })),
+    cards: (cards.data ?? []).map((card) => ({
+      ...card,
+      holder: relationName(card.family_members, "display_name"),
+    })),
     stores: stores.data ?? [],
   });
 }
@@ -130,7 +229,7 @@ export async function POST(request: Request) {
     type === "expense" && ["card", "store"].includes(input?.origin)
       ? (input.origin as "card" | "store")
       : "direct";
-  const description = String(input?.description ?? "").trim();
+  const requestedDescription = String(input?.description ?? "").trim();
   const date = String(input?.date ?? "");
   const memberId = String(input?.memberId ?? "");
   const categoryId = String(input?.categoryId ?? "");
@@ -160,7 +259,16 @@ export async function POST(request: Request) {
     origin === "direct" || !detailed
       ? Number(input?.amount)
       : Math.round(itemTotal * 100) / 100;
-  if (!description || !(amount > 0) || !/^\d{4}-\d{2}-\d{2}$/.test(date))
+  const description =
+    requestedDescription ||
+    (type === "income"
+      ? "Receita"
+      : origin === "card"
+        ? "Compra no cartão"
+        : origin === "store"
+          ? "Compra no comércio"
+          : "Despesa");
+  if (!(amount > 0) || !/^\d{4}-\d{2}-\d{2}$/.test(date))
     return NextResponse.json(
       {
         message:
@@ -228,6 +336,10 @@ export async function POST(request: Request) {
         purchase_date: date,
         category_id: category.id,
         installment_count: finalCount,
+        payment_type:
+          input.paymentType === "debit" || card.card_type === "debit"
+            ? "debit"
+            : "credit",
         created_by: userId,
       })
       .select("id")
@@ -239,7 +351,10 @@ export async function POST(request: Request) {
       );
     purchaseId = purchase.id;
     input.installmentCount = finalCount;
-    input.startDate = monthDate(date, card.closing_day && Number(date.slice(-2)) > card.closing_day ? 1 : 0);
+    input.startDate = monthDate(
+      date,
+      card.closing_day && Number(date.slice(-2)) > card.closing_day ? 1 : 0,
+    );
   }
   if (origin === "store") {
     input.installmentCount = 1;
@@ -273,19 +388,19 @@ export async function POST(request: Request) {
         { status: 400 },
       );
     purchaseId = purchase.id;
-    const { error: itemError } = detailed ? await supabase
-      .from("purchase_items")
-      .insert(
-        items.map(
-          (item: { name: string; quantity: number; unitPrice: number }) => ({
-            family_id: membership.family_id,
-            purchase_id: purchase.id,
-            name: item.name,
-            quantity: item.quantity,
-            unit_price: item.unitPrice,
-          }),
-        ),
-      ) : { error: null };
+    const { error: itemError } = detailed
+      ? await supabase.from("purchase_items").insert(
+          items.map(
+            (item: { name: string; quantity: number; unitPrice: number }) => ({
+              family_id: membership.family_id,
+              purchase_id: purchase.id,
+              name: item.name,
+              quantity: item.quantity,
+              unit_price: item.unitPrice,
+            }),
+          ),
+        )
+      : { error: null };
     if (itemError)
       return NextResponse.json(
         { message: "A compra foi criada, mas os itens não foram salvos." },
@@ -320,29 +435,25 @@ export async function POST(request: Request) {
         { status: 400 },
       );
     if (origin === "card" && purchaseId)
-      await supabase
-        .from("card_installments")
-        .insert({
-          family_id: membership.family_id,
-          purchase_id: purchaseId,
-          entry_id: entry.id,
-          installment_number: index + 1,
-          installment_count: finalCount,
-          amount: values[index],
-          competence_date: competence,
-        });
+      await supabase.from("card_installments").insert({
+        family_id: membership.family_id,
+        purchase_id: purchaseId,
+        entry_id: entry.id,
+        installment_number: index + 1,
+        installment_count: finalCount,
+        amount: values[index],
+        competence_date: competence,
+      });
     if (origin === "store" && purchaseId)
-      await supabase
-        .from("store_installments")
-        .insert({
-          family_id: membership.family_id,
-          purchase_id: purchaseId,
-          entry_id: entry.id,
-          installment_number: index + 1,
-          installment_count: finalCount,
-          amount: values[index],
-          due_date: competence,
-        });
+      await supabase.from("store_installments").insert({
+        family_id: membership.family_id,
+        purchase_id: purchaseId,
+        entry_id: entry.id,
+        installment_number: index + 1,
+        installment_count: finalCount,
+        amount: values[index],
+        due_date: competence,
+      });
   }
   return NextResponse.json({ ok: true }, { status: 201 });
 }

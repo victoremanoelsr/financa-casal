@@ -1,18 +1,8 @@
 import { createHmac } from "node:crypto";
 import { z } from "zod";
 import { normalizePersonName, normalizeUsername, onlyDigits } from "./format";
-
-export function isValidCpf(value: string) {
-  const cpf = onlyDigits(value);
-  if (cpf.length !== 11 || /^(\d)\1{10}$/.test(cpf)) return false;
-  const digit = (length: number) => {
-    let sum = 0;
-    for (let index = 0; index < length; index++) sum += Number(cpf[index]) * (length + 1 - index);
-    const remainder = (sum * 10) % 11;
-    return remainder === 10 ? 0 : remainder;
-  };
-  return digit(9) === Number(cpf[9]) && digit(10) === Number(cpf[10]);
-}
+import { isValidCpf } from "./cpf";
+export { isValidCpf } from "./cpf";
 
 export function hashCpf(value: string) {
   const key = process.env.PII_HASH_KEY;

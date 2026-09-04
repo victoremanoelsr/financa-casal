@@ -13,10 +13,11 @@ export async function GET() {
   const { supabase, userId } = await authenticatedUser();
   if (!userId) return NextResponse.json({ message: "Não autorizado." }, { status: 401 });
 
-  const [profileResult, addressResult, membershipResult] = await Promise.all([
+  const [profileResult, addressResult, membershipResult, preferencesResult] = await Promise.all([
     supabase.from("profiles").select("full_name,phone,contact_email,cpf_last4,birth_date").eq("id", userId).maybeSingle(),
     supabase.from("profile_addresses").select("postal_code,state_code,city,district,street,number,complement").eq("user_id", userId).maybeSingle(),
     supabase.from("family_members").select("id,family_id,display_name,role,families(id,name,join_code)").eq("user_id", userId).eq("status", "active").limit(1).maybeSingle(),
+    supabase.from("user_preferences").select("theme,notifications,list_order,daily_summary_time").eq("user_id", userId).maybeSingle(),
   ]);
 
   if (profileResult.error) return NextResponse.json({ message: "Não foi possível carregar seu cadastro." }, { status: 500 });
@@ -41,6 +42,12 @@ export async function GET() {
     family: family && membership ? { id: family.id, name: family.name, joinCode: family.join_code, role: membership.role } : null,
     members: (membersResult.data ?? []).map((member) => ({ id: member.id, displayName: member.display_name, role: member.role, isCurrentUser: member.user_id === userId })),
     categories: (categoriesResult.data ?? []).map((category) => ({ id: category.id, name: category.name, kind: category.kind, isSystem: category.is_system })),
+    preferences: {
+      theme: preferencesResult.data?.theme ?? "light",
+      notifications: preferencesResult.data?.notifications ?? { dueSoon: true, overdue: true, cards: true, goals: true, news: true },
+      listOrder: preferencesResult.data?.list_order ?? "newest",
+      dailySummaryTime: preferencesResult.data?.daily_summary_time?.slice(0, 5) ?? "20:00",
+    },
   });
 }
 
@@ -80,8 +87,23 @@ export async function POST(request: Request) {
   if (input?.action === "category") {
     const { data: membership } = await supabase.from("family_members").select("family_id").eq("user_id", userId).eq("status", "active").limit(1).maybeSingle();
     if (!membership) return NextResponse.json({ message: "Família não encontrada." }, { status: 404 });
-    const { error } = await supabase.from("categories").insert({ family_id: membership.family_id, name: String(input.name ?? "").trim(), kind: "both", is_system: false, created_by: userId });
+    const kind = ["income", "expense"].includes(String(input.kind)) ? String(input.kind) : "expense";
+    const { error } = await supabase.from("categories").insert({ family_id: membership.family_id, name: String(input.name ?? "").trim(), kind, is_system: false, created_by: userId });
     if (error) return NextResponse.json({ message: "Não foi possível adicionar a categoria." }, { status: 400 });
+    return NextResponse.json({ ok: true });
+  }
+  if (input?.action === "preferences") {
+    const theme = ["light", "dark", "system"].includes(String(input.theme)) ? input.theme : "light";
+    const notifications = input.notifications && typeof input.notifications === "object" ? input.notifications : {};
+    const { error } = await supabase.from("user_preferences").upsert({
+      user_id: userId,
+      theme,
+      notifications,
+      list_order: input.listOrder === "oldest" ? "oldest" : "newest",
+      daily_summary_time: /^\d{2}:\d{2}$/.test(String(input.dailySummaryTime)) ? input.dailySummaryTime : null,
+      updated_at: new Date().toISOString(),
+    });
+    if (error) return NextResponse.json({ message: "Não foi possível salvar as preferências." }, { status: 400 });
     return NextResponse.json({ ok: true });
   }
   return NextResponse.json({ message: "Ação inválida." }, { status: 400 });

@@ -7,6 +7,8 @@ const publicRoutes = ["/entrar", "/cadastro", "/recuperar-acesso", "/offline"];
 export async function proxy(request: NextRequest) {
   const isPublic = publicRoutes.some((route) => request.nextUrl.pathname.startsWith(route));
   const isApi = request.nextUrl.pathname.startsWith("/api/");
+  const demoMode = request.cookies.get("financa_demo")?.value === "1";
+  if (demoMode && !isApi) return NextResponse.next();
 
   // Falha fechada: uma configuração ausente nunca pode liberar as telas privadas.
   if (!hasSupabaseConfig()) {

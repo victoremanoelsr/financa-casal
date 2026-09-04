@@ -45,15 +45,47 @@ export async function GET() {
       { status: 500 },
     );
   const [{ data: purchases }, { data: paymentEvents }] = await Promise.all([
-    supabase.from("card_purchases").select("card_id,total_amount").eq("family_id", membership.family_id).eq("status", "active"),
-    supabase.from("audit_events").select("id,event_type,metadata").eq("family_id", membership.family_id).in("event_type", ["bill_payment_recorded", "bill_payment_reversed"]),
+    supabase
+      .from("card_purchases")
+      .select("card_id,total_amount,payment_type")
+      .eq("family_id", membership.family_id)
+      .eq("status", "active"),
+    supabase
+      .from("audit_events")
+      .select("id,event_type,metadata")
+      .eq("family_id", membership.family_id)
+      .in("event_type", ["bill_payment_recorded", "bill_payment_reversed"]),
   ]);
-  const usedByCard = (purchases ?? []).reduce<Record<string, number>>((totals, purchase) => ({ ...totals, [purchase.card_id]: (totals[purchase.card_id] ?? 0) + Number(purchase.total_amount) }), {});
-  const reversedPaymentIds = new Set((paymentEvents ?? []).filter((event) => event.event_type === "bill_payment_reversed").map((event) => Number((event.metadata as { paymentEventId?: number }).paymentEventId)));
+  const usedByCard = (purchases ?? [])
+    .filter((purchase) => purchase.payment_type !== "debit")
+    .reduce<Record<string, number>>(
+    (totals, purchase) => ({
+      ...totals,
+      [purchase.card_id]:
+        (totals[purchase.card_id] ?? 0) + Number(purchase.total_amount),
+    }),
+      {},
+    );
+  const reversedPaymentIds = new Set(
+    (paymentEvents ?? [])
+      .filter((event) => event.event_type === "bill_payment_reversed")
+      .map((event) =>
+        Number((event.metadata as { paymentEventId?: number }).paymentEventId),
+      ),
+  );
   for (const event of paymentEvents ?? []) {
     const metadata = event.metadata as { billKey?: string; amount?: number };
-    if (event.event_type !== "bill_payment_recorded" || reversedPaymentIds.has(Number(event.id)) || !metadata.billKey?.startsWith("card-")) continue;
-    const cardId = metadata.billKey.slice(5, 41); usedByCard[cardId] = Math.max(0, (usedByCard[cardId] ?? 0) - Number(metadata.amount ?? 0));
+    if (
+      event.event_type !== "bill_payment_recorded" ||
+      reversedPaymentIds.has(Number(event.id)) ||
+      !metadata.billKey?.startsWith("card-")
+    )
+      continue;
+    const cardId = metadata.billKey.slice(5, 41);
+    usedByCard[cardId] = Math.max(
+      0,
+      (usedByCard[cardId] ?? 0) - Number(metadata.amount ?? 0),
+    );
   }
   return NextResponse.json({
     cards: (data ?? []).map((card) => {
@@ -62,7 +94,11 @@ export async function GET() {
         | { display_name: string }[]
         | null;
       let visual: { mode?: string; image?: string } = {};
-      try { visual = JSON.parse(card.visual_key ?? "{}"); } catch { visual = {}; }
+      try {
+        visual = JSON.parse(card.visual_key ?? "{}");
+      } catch {
+        visual = {};
+      }
       return {
         id: card.id,
         name: card.name,
@@ -74,7 +110,7 @@ export async function GET() {
         lastFour: card.last_four ?? "0000",
         visualKey: "blue",
         backgroundImage: visual.image ?? "",
-        used: usedByCard[card.id] ?? 0,
+        used: card.card_type === "debit" ? 0 : (usedByCard[card.id] ?? 0),
         holder: Array.isArray(holderRelation)
           ? holderRelation[0]?.display_name
           : holderRelation?.display_name,
@@ -103,14 +139,17 @@ export async function POST(request: Request) {
   const institution = String(input.get("institution") ?? "").trim();
   const holderMemberId = String(input.get("holderMemberId") ?? "");
   const requestedType = String(input.get("type") ?? "");
-  const mode = ["credit", "debit", "credit_debit"].includes(requestedType) ? requestedType : "credit";
+  const mode = ["credit", "debit", "credit_debit"].includes(requestedType)
+    ? requestedType
+    : "credit";
   const cardType = mode === "debit" ? "debit" : "credit";
   const creditLimit = Number(input.get("limit"));
   const closingDay = Number(input.get("closingDay"));
   const dueDay = Number(input.get("dueDay"));
   const lastFour = String(input.get("lastFour") ?? "").replace(/\D/g, "");
   const imageValue = input.get("backgroundImage");
-  const imageFile = imageValue instanceof File && imageValue.size > 0 ? imageValue : null;
+  const imageFile =
+    imageValue instanceof File && imageValue.size > 0 ? imageValue : null;
   if (!name || !institution || lastFour.length !== 4)
     return NextResponse.json(
       { message: "Revise os dados do cartão." },
@@ -174,7 +213,12 @@ export async function POST(request: Request) {
         );
     }
 
-    const extension = imageFile.type === "image/png" ? "png" : imageFile.type === "image/webp" ? "webp" : "jpg";
+    const extension =
+      imageFile.type === "image/png"
+        ? "png"
+        : imageFile.type === "image/webp"
+          ? "webp"
+          : "jpg";
     uploadedImagePath = `${membership.family_id}/${randomUUID()}.${extension}`;
     const { error: uploadError } = await admin.storage
       .from(CARD_IMAGES_BUCKET)
@@ -193,21 +237,19 @@ export async function POST(request: Request) {
       .getPublicUrl(uploadedImagePath).data.publicUrl;
   }
 
-  const { error } = await supabase
-    .from("cards")
-    .insert({
-      family_id: membership.family_id,
-      name,
-      institution,
-      holder_member_id: holder.id,
-      card_type: cardType,
-      credit_limit: cardType === "credit" ? creditLimit : null,
-      closing_day: cardType === "credit" ? closingDay : null,
-      due_day: cardType === "credit" ? dueDay : null,
-      last_four: lastFour,
-      visual_key: JSON.stringify({ mode, image: backgroundImage }),
-      created_by: userId,
-    });
+  const { error } = await supabase.from("cards").insert({
+    family_id: membership.family_id,
+    name,
+    institution,
+    holder_member_id: holder.id,
+    card_type: cardType,
+    credit_limit: cardType === "credit" ? creditLimit : null,
+    closing_day: cardType === "credit" ? closingDay : null,
+    due_day: cardType === "credit" ? dueDay : null,
+    last_four: lastFour,
+    visual_key: JSON.stringify({ mode, image: backgroundImage }),
+    created_by: userId,
+  });
   if (error) {
     if (uploadedImagePath) {
       const admin = createAdminSupabaseClient();

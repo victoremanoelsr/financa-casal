@@ -1,65 +1,32 @@
 "use client";
-
 import Link from "next/link";
-import { ArrowDownLeft, ArrowUpRight, CircleDollarSign, CreditCard, Plus, Store } from "lucide-react";
-import { useEffect, useState } from "react";
+import { ArrowDownToLine, ArrowUpRight, CalendarDays, ChevronDown, ChevronRight, CircleDollarSign, CreditCard, Landmark, ReceiptText, Repeat2, Store, WalletCards } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { PageHeader, PeriodFilter } from "@/components/app-shell";
-import { formatCurrency } from "@/lib/format";
+import { PageHeader } from "@/components/app-shell";
+import { formatCurrency, formatDate } from "@/lib/format";
 
-type DashboardData = {
-  income: number;
-  expenses: number;
-  previousBalance: number;
-  balance: number;
-  cashFlow: Array<{ label: string; receitas: number; despesas: number }>;
-  categories: Array<{ name: string; value: number; color: string }>;
-  expenseItems: Array<{ type: "card" | "store" | "direct"; id: string; name: string; subtitle: string; amount: number; date: string }>;
-};
-
-const currentMonth = () => new Date().toISOString().slice(0, 7);
-const EMPTY: DashboardData = { income: 0, expenses: 0, previousBalance: 0, balance: 0, cashFlow: [], categories: [], expenseItems: [] };
+type Movement = { id: string; type: "income" | "expense"; title: string; subtitle: string; origin: string; amount: number; date: string; href: string };
+type DashboardData = { userName: string; income: number; expenses: number; previousBalance: number; balance: number; cashFlow: Array<{ day: number; label: string; receitas: number; despesas: number }>; categories: Array<{ name: string; value: number; color: string }>; upcoming: Array<{ id: string; title: string; origin: string; dueDate: string; remaining: number; href: string }>; movements: Movement[] };
+const EMPTY: DashboardData = { userName: "", income: 0, expenses: 0, previousBalance: 0, balance: 0, cashFlow: [], categories: [], upcoming: [], movements: [] };
+const MONTHS = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
+const currentMonth = () => { const now = new Date(); return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`; };
+const iconFor = (origin: string) => origin === "Cartão" ? CreditCard : origin === "Comércio" ? Store : origin === "Assinatura" ? Repeat2 : origin === "Despesa fixa" ? ReceiptText : origin === "Financeiro" ? WalletCards : Landmark;
 
 export default function DashboardPage() {
-  const [data, setData] = useState<DashboardData>(EMPTY);
-  const [month, setMonth] = useState(currentMonth);
-  useEffect(() => {
-    fetch(`/api/dashboard?month=${month}`, { cache: "no-store" })
-      .then((response) => response.ok ? response.json() : EMPTY)
-      .then(setData)
-      .catch(() => setData(EMPTY));
-  }, [month]);
-  const totalCategories = data.categories.reduce((total, item) => total + item.value, 0);
-  const largestCategory = Math.max(...data.categories.map((item) => item.value), 1);
-  let accumulated = 0;
-  const donut = totalCategories ? `conic-gradient(${data.categories.map((category) => {
-    const start = accumulated;
-    accumulated += category.value / totalCategories * 100;
-    return `${category.color} ${start}% ${accumulated}%`;
-  }).join(",")})` : "#e7edf0";
-
-  return <>
-    <PageHeader title="Olá! 👋" subtitle="Acompanhe como estão as finanças da sua família." />
-    <div className="toolbar"><PeriodFilter value={month} onChange={setMonth} /><Link href="/financeiro?novo=1" className="primary-button"><Plus size={16} /> Novo lançamento</Link></div>
-    <section className="report-summary dashboard-summary" aria-label="Resumo financeiro">
-      <article className="summary-card balance"><div className="summary-icon"><CircleDollarSign /></div><div><small>Saldo atual</small><strong>{formatCurrency(data.balance)}</strong></div></article>
-      <article className="summary-card"><div className="summary-icon income"><ArrowDownLeft /></div><div><small>Receitas</small><strong>{formatCurrency(data.income)}</strong></div></article>
-      <article className="summary-card"><div className="summary-icon expense"><ArrowUpRight /></div><div><small>Despesas</small><strong>{formatCurrency(data.expenses)}</strong></div></article>
-    </section>
-    <section className="dashboard-grid">
-      <article className="panel cashflow-panel">
-        <div className="panel-heading"><div><h2>Receitas e despesas</h2><p>Lançamentos originais do mês</p></div><div className="legend"><span className="income-dot" />Receitas <span className="expense-dot" />Despesas</div></div>
-        <div className="recharts-wrap"><ResponsiveContainer width="100%" height="100%"><AreaChart data={data.cashFlow} margin={{ top: 15, right: 5, left: -18, bottom: 0 }}><defs><linearGradient id="greenGradient" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#16A085" stopOpacity={0.28} /><stop offset="100%" stopColor="#16A085" stopOpacity={0} /></linearGradient><linearGradient id="redGradient" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#EF4444" stopOpacity={0.16} /><stop offset="100%" stopColor="#EF4444" stopOpacity={0} /></linearGradient></defs><CartesianGrid stroke="#E8EDF1" strokeDasharray="4 4" vertical={false} /><XAxis dataKey="label" tick={{ fontSize: 9, fill: "#94A3B8" }} axisLine={false} tickLine={false} /><YAxis tickFormatter={(value) => formatCurrency(Number(value))} tick={{ fontSize: 9, fill: "#94A3B8" }} axisLine={false} tickLine={false} /><Tooltip formatter={(value) => formatCurrency(Number(value))} contentStyle={{ borderRadius: 12, border: "1px solid #E8EDF1", fontSize: 11 }} /><Area type="monotone" dataKey="receitas" stroke="#16A085" strokeWidth={3} fill="url(#greenGradient)" /><Area type="monotone" dataKey="despesas" stroke="#EF4444" strokeWidth={2.5} fill="url(#redGradient)" /></AreaChart></ResponsiveContainer></div>
-      </article>
-      <article className="panel category-panel">
-        <div className="panel-heading"><div><h2>Gastos por categoria</h2><p>{totalCategories ? "Despesas originais do mês" : "Nenhuma despesa cadastrada"}</p></div></div>
-        <div className="donut-wrap"><div className="donut" style={{ background: donut }}><span><small>Total gasto</small><strong>{formatCurrency(totalCategories)}</strong></span></div><div className="category-legend">{data.categories.slice(0, 4).map((category) => <p key={category.name}><i style={{ background: category.color }} />{category.name}<strong>{Math.round(category.value / totalCategories * 100)}%</strong></p>)}</div></div>
-      </article>
-    </section>
-    <section className="bottom-grid">
-      <article className="panel open-expenses-panel"><div className="panel-heading"><div><h2>Gastos do período</h2><p>Compras e despesas originais cadastradas no mês</p></div></div><div className="open-expense-list">{data.expenseItems.slice(0, 6).map((item) => { const content = <><span className="open-expense-image">{item.type === "card" ? <CreditCard /> : <Store />}</span><div><p><strong>{item.name}</strong><span>{formatCurrency(item.amount)}</span></p><small>{item.subtitle}</small></div></>; return item.type === "direct" ? <div className="open-expense-row" key={`${item.type}-${item.id}`}>{content}</div> : <Link href={`/${item.type === "card" ? "cartoes" : "comercios"}/${item.id}`} className="open-expense-row" key={`${item.type}-${item.id}`}>{content}</Link>; })}</div></article>
-      <article className="panel alerts-panel"><div className="panel-heading"><div><h2>Próximos vencimentos</h2><p>Nenhuma conta cadastrada</p></div><span className="alert-count">0 avisos</span></div><Link href="/contas" className="secondary-button">Ver todas as contas</Link></article>
-    </section>
-    <section className="panel module-section"><div className="panel-heading"><div><h2>Análise por categoria</h2><p>Compare rapidamente onde sua família gasta mais e menos</p></div><Link className="text-button" href="/relatorios">Explorar relatório →</Link></div><div className="category-bars">{data.categories.map((category) => <div key={category.name}><span>{category.name}</span><i><b style={{ height: `${Math.max(18, category.value / largestCategory * 100)}%`, background: category.color }} /></i><strong>{formatCurrency(category.value)}</strong></div>)}</div></section>
-  </>;
+  const [data, setData] = useState<DashboardData>(EMPTY); const [month, setMonth] = useState(currentMonth); const [periodOpen, setPeriodOpen] = useState(false); const [loading, setLoading] = useState(true);
+  useEffect(() => { fetch(`/api/dashboard?month=${month}`, { cache: "no-store" }).then(async (response) => response.ok ? response.json() : EMPTY).then(setData).catch(() => setData(EMPTY)).finally(() => setLoading(false)); }, [month]);
+  const [year, monthNumber] = month.split("-").map(Number); const years = useMemo(() => Array.from({ length: 11 }, (_, index) => new Date().getFullYear() - 5 + index), []);
+  const totalCategories = data.categories.reduce((total, item) => total + item.value, 0); let accumulated = 0;
+  const donut = totalCategories ? `conic-gradient(${data.categories.map((item) => { const start = accumulated; accumulated += item.value / totalCategories * 100; return `${item.color} ${start}% ${accumulated}%`; }).join(",")})` : "#e7edf0";
+  const selectPeriod = (nextMonth: number, nextYear: number) => { setLoading(true); setMonth(`${nextYear}-${String(nextMonth).padStart(2, "0")}`); };
+  return <div className="dashboard-page">
+    <PageHeader title={`Olá${data.userName ? `, ${data.userName}` : ""} 👋`} subtitle="Acompanhe como estão as finanças da sua família." action={<div className="dashboard-period"><button className="dashboard-period-button" onClick={() => setPeriodOpen((open) => !open)} aria-expanded={periodOpen}><CalendarDays/>{MONTHS[monthNumber - 1]} {year}<ChevronDown/></button>{periodOpen && <div className="dashboard-period-menu"><label><span>Mês</span><select value={monthNumber} onChange={(event) => selectPeriod(Number(event.target.value), year)}>{MONTHS.map((name, index) => <option value={index + 1} key={name}>{name}</option>)}</select></label><label><span>Ano</span><select value={year} onChange={(event) => selectPeriod(monthNumber, Number(event.target.value))}>{years.map((item) => <option key={item}>{item}</option>)}</select></label><button onClick={() => setPeriodOpen(false)}>Aplicar período</button></div>}</div>}/>
+    <section className="dashboard-kpis" aria-label="Resumo financeiro"><article><span className="kpi-icon balance"><CircleDollarSign/></span><div><small>Saldo</small><strong>{formatCurrency(data.balance)}</strong><p>Inicial: {formatCurrency(data.previousBalance)}</p></div></article><article><span className="kpi-icon income"><ArrowDownToLine/></span><div><small>Entradas</small><strong>{formatCurrency(data.income)}</strong><p>Total no mês</p></div></article><article><span className="kpi-icon expense"><ArrowUpRight/></span><div><small>Saídas</small><strong>{formatCurrency(data.expenses)}</strong><p>Total no mês</p></div></article></section>
+    <section className="panel dashboard-section cashflow-panel"><div className="panel-heading"><div><h2>Receitas e despesas</h2><p>Acompanhe a evolução acumulada do mês</p></div><div className="legend"><span className="income-dot"/>Entradas <span className="expense-dot"/>Saídas</div></div>{data.cashFlow.length ? <div className="dashboard-chart"><ResponsiveContainer width="100%" height="100%"><AreaChart data={data.cashFlow} margin={{ top: 14, right: 4, left: -20, bottom: 0 }}><defs><linearGradient id="dashboardIncome" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#16A085" stopOpacity=".2"/><stop offset="100%" stopColor="#16A085" stopOpacity="0"/></linearGradient><linearGradient id="dashboardExpense" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#EF4444" stopOpacity=".12"/><stop offset="100%" stopColor="#EF4444" stopOpacity="0"/></linearGradient></defs><CartesianGrid stroke="#E8EDF1" strokeDasharray="4 4" vertical={false}/><XAxis dataKey="label" interval={6} tickFormatter={(value) => `${value} ${MONTHS[monthNumber - 1].slice(0, 3)}`} tick={{ fontSize: 9, fill: "#87959D" }} axisLine={false} tickLine={false}/><YAxis tickFormatter={(value) => Number(value) >= 1000 ? `R$ ${Math.round(Number(value) / 1000)} mil` : `R$ ${value}`} tick={{ fontSize: 8, fill: "#94A3B8" }} axisLine={false} tickLine={false}/><Tooltip formatter={(value) => formatCurrency(Number(value))} labelFormatter={(label) => `Dia ${label}`} contentStyle={{ borderRadius: 12, border: "1px solid #E2E8EC", fontSize: 11 }}/><Area type="monotone" dataKey="receitas" name="Entradas" stroke="#16A085" strokeWidth={2.5} fill="url(#dashboardIncome)" dot={false}/><Area type="monotone" dataKey="despesas" name="Saídas" stroke="#EF4444" strokeWidth={2.5} fill="url(#dashboardExpense)" dot={false}/></AreaChart></ResponsiveContainer></div> : <div className="dashboard-empty"><WalletCards/><strong>Nenhuma movimentação neste período.</strong><p>O gráfico aparecerá quando houver entradas ou saídas.</p></div>}</section>
+    <section className="panel dashboard-section category-panel"><div className="panel-heading"><div><h2>Gastos por categoria</h2><p>Distribuição das saídas efetivas do mês</p></div></div>{totalCategories ? <div className="dashboard-donut-wrap"><div className="donut dashboard-donut" style={{ background: donut }}><span><small>Total gasto</small><strong>{formatCurrency(totalCategories)}</strong></span></div><div className="dashboard-category-legend">{data.categories.map((item) => <p key={item.name}><i style={{ background: item.color }}/><span>{item.name}</span><b>{formatCurrency(item.value)}</b><strong>{(item.value / totalCategories * 100).toFixed(1).replace(".", ",")}%</strong></p>)}</div></div> : <div className="dashboard-empty compact"><CircleDollarSign/><strong>Nenhuma saída neste período.</strong></div>}</section>
+    <section className="panel dashboard-section upcoming-panel"><div className="panel-heading"><div><h2>Próximos vencimentos</h2><p>Contas que vencem nos próximos 10 dias</p></div>{data.upcoming.length > 0 && <span className="dashboard-count">{data.upcoming.length} {data.upcoming.length === 1 ? "próximo" : "próximos"}</span>}</div>{data.upcoming.length ? <div className="dashboard-list">{data.upcoming.map((item) => { const Icon = iconFor(item.origin); return <Link href={item.href} key={item.id}><span className="movement-icon"><Icon/></span><div><strong>{item.title}</strong><small>{item.origin} · vence em {formatDate(item.dueDate)}</small></div><b>{formatCurrency(item.remaining)}</b><ChevronRight/></Link>; })}</div> : <div className="dashboard-empty compact"><CalendarDays/><strong>Nenhum vencimento nos próximos 10 dias.</strong></div>}<Link href="/contas" className="dashboard-panel-link">Ver todas as contas <ChevronRight/></Link></section>
+    <section className="panel dashboard-section movements-panel"><div className="panel-heading"><div><h2>Histórico de movimentações</h2><p>Últimas movimentações de {MONTHS[monthNumber - 1].toLocaleLowerCase("pt-BR")}</p></div><Link href={`/financeiro?month=${month}`} className="text-button">Ver todo histórico</Link></div>{data.movements.length ? <div className="dashboard-list">{data.movements.map((item) => { const Icon = item.type === "income" ? ArrowDownToLine : iconFor(item.origin); return <Link href={item.href} key={item.id}><span className={`movement-date ${item.type}`}><small>{item.date.slice(-2)}</small><b>{Icon && <Icon/>}</b></span><div><strong>{item.title}</strong><small>{item.subtitle} · {item.origin}</small></div><time>{formatDate(item.date)}</time><b className={item.type === "income" ? "positive-text" : "negative-text"}>{item.type === "income" ? "+ " : "- "}{formatCurrency(item.amount)}</b></Link>; })}</div> : <div className="dashboard-empty compact"><ReceiptText/><strong>Nenhuma movimentação neste período.</strong></div>}</section>
+    {loading && <span className="dashboard-loading" aria-label="Atualizando Dashboard"/>}
+  </div>;
 }
