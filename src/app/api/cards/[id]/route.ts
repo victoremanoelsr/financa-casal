@@ -27,6 +27,79 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
+  const demoMode = (request.headers.get("cookie") ?? "").includes("financa_demo=1");
+  if (demoMode) {
+    const requestedMonth = new URL(request.url).searchParams.get("month") ?? new Date().toISOString().slice(0, 7);
+    if (id === "demo-c1" || id === "default" || id.includes("nubank")) {
+      return NextResponse.json({
+        card: {
+          id: "demo-c1",
+          name: "Nubank",
+          institution: "Nubank",
+          type: "credit_debit",
+          limit: 2500,
+          closingDay: 3,
+          dueDay: 10,
+          lastFour: "4892",
+          visualKey: "purple",
+          backgroundImage: "",
+          holder: "Victor Emanuel",
+          paid: 0,
+          used: 1250,
+        },
+        purchases: [
+          {
+            id: "dp1",
+            description: "Supermercado Compre Bem",
+            amount: 350.00,
+            date: `${requestedMonth}-05`,
+            originalDate: `${requestedMonth}-05`,
+            installmentNumber: 1,
+            installments: 1,
+            paymentType: "credit",
+            categoryId: "cat1",
+            category: "Supermercado",
+          },
+          {
+            id: "dp2",
+            description: "Posto Shell Combustível",
+            amount: 200.00,
+            date: `${requestedMonth}-12`,
+            originalDate: `${requestedMonth}-12`,
+            installmentNumber: 1,
+            installments: 1,
+            paymentType: "credit",
+            categoryId: "cat2",
+            category: "Transporte",
+          },
+          {
+            id: "dp3",
+            description: "Magazine Luiza - Airfryer",
+            amount: 100.00,
+            date: `${requestedMonth}-15`,
+            originalDate: `${requestedMonth}-15`,
+            installmentNumber: 2,
+            installments: 4,
+            paymentType: "credit",
+            categoryId: "cat3",
+            category: "Casa & Eletro",
+          },
+          {
+            id: "dp4",
+            description: "Farmácia Pague Menos",
+            amount: 75.50,
+            date: `${requestedMonth}-18`,
+            originalDate: `${requestedMonth}-18`,
+            installmentNumber: 1,
+            installments: 1,
+            paymentType: "credit",
+            categoryId: "cat4",
+            category: "Saúde & Farmácia",
+          },
+        ],
+      });
+    }
+  }
   const { supabase, userId, card } = await cardContext(id);
   if (!userId)
     return NextResponse.json({ message: "Não autorizado." }, { status: 401 });

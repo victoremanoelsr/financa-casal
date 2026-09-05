@@ -13,8 +13,115 @@ async function storeContext(id: string) {
   return { supabase, userId, store };
 }
 
-export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+  const demoMode = (request.headers.get("cookie") ?? "").includes("financa_demo=1");
+  const requestedMonth = new URL(request.url).searchParams.get("month") ?? new Date().toISOString().slice(0, 7);
+  if (demoMode) {
+    const isFarmacia = id === "demo-s2" || id.includes("farmacia");
+    const isLoja = id === "demo-s3" || id.includes("loja");
+    if (isFarmacia) {
+      return NextResponse.json({
+        store: {
+          id: "demo-s2",
+          name: "Farmácia São João",
+          holder: "Emilly Andrade",
+          limit: 2000,
+          used: 850,
+          available: 1150,
+          type: "Crediário",
+          address: "Rua das Flores, 123 - Centro",
+          phone: "(48) 3333-4444",
+          dueDateNote: "Não possui data de vencimento",
+          backgroundImage: "",
+        },
+        purchases: [
+          {
+            id: "sp1",
+            description: "Medicamentos",
+            date: `${requestedMonth}-03`,
+            total: 120.00,
+            status: "paid",
+            paid: 120.00,
+            remaining: 0,
+            items: [
+              { id: "i1", name: "Amoxicilina 500mg", quantity: 1, unitPrice: 45.00, total: 45.00 },
+              { id: "i2", name: "Paracetamol 750mg", quantity: 2, unitPrice: 15.00, total: 30.00 },
+              { id: "i3", name: "Vitamina C 1g", quantity: 1, unitPrice: 45.00, total: 45.00 },
+            ],
+          },
+          {
+            id: "sp2",
+            description: "Dipirona",
+            date: `${requestedMonth}-01`,
+            total: 60.00,
+            status: "open",
+            paid: 0,
+            remaining: 60.00,
+            items: [
+              { id: "i4", name: "Dipirona Gotas 20ml", quantity: 2, unitPrice: 18.00, total: 36.00 },
+              { id: "i5", name: "Esparadrapo 5cm", quantity: 1, unitPrice: 24.00, total: 24.00 },
+            ],
+          },
+          {
+            id: "sp3",
+            description: "Higiene pessoal",
+            date: "2026-08-28",
+            total: 45.00,
+            status: "partial",
+            paid: 20.00,
+            remaining: 25.00,
+            items: [
+              { id: "i6", name: "Creme dental", quantity: 1, unitPrice: 45.00, total: 45.00 },
+            ],
+          },
+          {
+            id: "sp4",
+            description: "Consulta médica",
+            date: "2026-08-20",
+            total: 200.00,
+            status: "overdue",
+            paid: 0,
+            remaining: 200.00,
+            items: [
+              { id: "i7", name: "Exame laboratorial", quantity: 1, unitPrice: 200.00, total: 200.00 },
+            ],
+          },
+        ],
+      });
+    }
+
+    return NextResponse.json({
+      store: {
+        id: id,
+        name: isLoja ? "Loja Center" : "Capitinha",
+        holder: "Victor Emanuel",
+        limit: isLoja ? 1500 : 2000,
+        used: isLoja ? 300 : 1000,
+        available: isLoja ? 1200 : 1000,
+        type: "Crediário",
+        address: "Av. Brasil, 450",
+        phone: "(48) 9999-8888",
+        dueDateNote: "Não possui data de vencimento",
+        backgroundImage: "",
+      },
+      purchases: [
+        {
+          id: "sp-d1",
+          description: "Compras gerais",
+          date: `${requestedMonth}-02`,
+          total: isLoja ? 300 : 1000,
+          status: "open",
+          paid: 0,
+          remaining: isLoja ? 300 : 1000,
+          items: [
+            { id: "i-d1", name: "Item principal", quantity: 1, unitPrice: isLoja ? 300 : 1000, total: isLoja ? 300 : 1000 },
+          ],
+        },
+      ],
+    });
+  }
+
   const { supabase, userId, store } = await storeContext(id);
   if (!userId) return NextResponse.json({ message: "Não autorizado." }, { status: 401 });
   if (!store) return NextResponse.json({ message: "Comércio não encontrado." }, { status: 404 });
@@ -23,8 +130,21 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   const purchaseIds = (purchases ?? []).map((purchase) => purchase.id);
   const { data: installments } = purchaseIds.length ? await supabase.from("store_installments").select("id,purchase_id").in("purchase_id", purchaseIds) : { data: [] };
   const installmentIds = new Set((installments ?? []).map((installment) => installment.id));
+  const installmentToPurchase = new Map((installments ?? []).map((inst) => [inst.id, inst.purchase_id]));
   const { data: paymentEvents } = await supabase.from("audit_events").select("id,event_type,metadata").eq("family_id", store.family_id).in("event_type", ["bill_payment_recorded", "bill_payment_reversed"]);
   const reversedPaymentIds = new Set((paymentEvents ?? []).filter((event) => event.event_type === "bill_payment_reversed").map((event) => Number((event.metadata as { paymentEventId?: number }).paymentEventId)));
+  
+  const paidByPurchase = new Map<string, number>();
+  for (const event of paymentEvents ?? []) {
+    const metadata = event.metadata as { billKey?: string; amount?: number };
+    if (event.event_type !== "bill_payment_recorded" || reversedPaymentIds.has(Number(event.id)) || !metadata.billKey?.startsWith("store-")) continue;
+    const instId = metadata.billKey.slice(6);
+    const pId = installmentToPurchase.get(instId);
+    if (pId) {
+      paidByPurchase.set(pId, (paidByPurchase.get(pId) ?? 0) + Number(metadata.amount ?? 0));
+    }
+  }
+
   const paid = (paymentEvents ?? []).filter((event) => { const metadata = event.metadata as { billKey?: string }; return event.event_type === "bill_payment_recorded" && !reversedPaymentIds.has(Number(event.id)) && metadata.billKey?.startsWith("store-") && installmentIds.has(metadata.billKey.slice(6)); }).reduce((sum, event) => sum + Number((event.metadata as { amount?: number }).amount ?? 0), 0);
   const holder = store.family_members as unknown as { display_name?: string } | { display_name?: string }[] | null;
   const admin = createAdminSupabaseClient();
@@ -32,9 +152,52 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   const imageFile = (files ?? []).find((file) => file.name === store.id);
   const backgroundImage = imageFile ? `${admin.storage.from(BUCKET).getPublicUrl(`${store.family_id}/${store.id}`).data.publicUrl}?v=${encodeURIComponent(imageFile.updated_at ?? "")}` : "";
   const used = Math.max(0, (purchases ?? []).reduce((sum, purchase) => sum + Number(purchase.total_amount), 0) - paid);
+
+  const enrichedPurchases = (purchases ?? []).flatMap((purchase) => {
+    const pPaid = paidByPurchase.get(purchase.id) ?? 0;
+    const remaining = Math.max(0, Number(purchase.total_amount) - pPaid);
+    const isCurrentMonth = purchase.purchase_date.startsWith(requestedMonth);
+    const isPendingOlder = purchase.purchase_date < requestedMonth && remaining > 0;
+    if (!isCurrentMonth && !isPendingOlder) return [];
+
+    let status: "paid" | "partial" | "open" | "overdue" = "open";
+    if (remaining <= 0) status = "paid";
+    else if (pPaid > 0) status = "partial";
+    else if (purchase.purchase_date < requestedMonth) status = "overdue";
+
+    return [{
+      id: purchase.id,
+      description: `Compra em ${store.name}`,
+      date: purchase.purchase_date,
+      total: Number(purchase.total_amount),
+      status,
+      paid: pPaid,
+      remaining,
+      items: (purchase.purchase_items ?? []).map((item) => ({
+        id: item.id,
+        name: item.name,
+        quantity: Number(item.quantity),
+        unitPrice: Number(item.unit_price),
+        total: Number(item.total_amount),
+      })),
+    }];
+  });
+
   return NextResponse.json({
-    store: { id: store.id, name: store.name, holder: Array.isArray(holder) ? holder[0]?.display_name : holder?.display_name, limit: Number(store.credit_limit), used, backgroundImage },
-    purchases: (purchases ?? []).map((purchase) => ({ id: purchase.id, date: purchase.purchase_date, total: Number(purchase.total_amount), items: (purchase.purchase_items ?? []).map((item) => ({ id: item.id, name: item.name, quantity: Number(item.quantity), unitPrice: Number(item.unit_price), total: Number(item.total_amount) })) })),
+    store: {
+      id: store.id,
+      name: store.name,
+      holder: Array.isArray(holder) ? holder[0]?.display_name : holder?.display_name,
+      limit: Number(store.credit_limit),
+      used,
+      available: Math.max(0, Number(store.credit_limit) - used),
+      type: "Crediário",
+      address: "Endereço cadastrado",
+      phone: "Não informado",
+      dueDateNote: "Não possui data de vencimento",
+      backgroundImage,
+    },
+    purchases: enrichedPurchases,
   });
 }
 

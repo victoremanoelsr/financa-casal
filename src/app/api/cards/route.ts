@@ -26,7 +26,59 @@ async function context() {
   return { supabase, userId, membership };
 }
 
-export async function GET() {
+export async function GET(request: Request) {
+  const demoMode = (request.headers.get("cookie") ?? "").includes("financa_demo=1");
+  if (demoMode) {
+    return NextResponse.json({
+      cards: [
+        {
+          id: "demo-c1",
+          name: "Nubank",
+          institution: "Nubank",
+          type: "credit_debit",
+          limit: 2500,
+          closingDay: 3,
+          dueDay: 10,
+          lastFour: "4892",
+          visualKey: "purple",
+          backgroundImage: "",
+          used: 1250,
+          holder: "Victor Emanuel",
+          holderMemberId: "demo-m1",
+        },
+        {
+          id: "demo-c2",
+          name: "Cartão Atacadão",
+          institution: "Atacadão",
+          type: "credit",
+          limit: 2000,
+          closingDay: 15,
+          dueDay: 22,
+          lastFour: "7731",
+          visualKey: "orange",
+          backgroundImage: "",
+          used: 680.5,
+          holder: "Victor Emanuel",
+          holderMemberId: "demo-m1",
+        },
+        {
+          id: "demo-c3",
+          name: "Mercado Pago",
+          institution: "Mercado Pago",
+          type: "credit",
+          limit: 1500,
+          closingDay: 1,
+          dueDay: 8,
+          lastFour: "3309",
+          visualKey: "blue",
+          backgroundImage: "",
+          used: 250,
+          holder: "Victor Emanuel",
+          holderMemberId: "demo-m1",
+        },
+      ],
+    });
+  }
   const { supabase, userId, membership } = await context();
   if (!userId)
     return NextResponse.json({ message: "Não autorizado." }, { status: 401 });

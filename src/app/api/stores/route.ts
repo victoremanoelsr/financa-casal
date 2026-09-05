@@ -15,7 +15,44 @@ async function context() {
   return { supabase, userId, membership };
 }
 
-export async function GET() {
+export async function GET(request: Request) {
+  const demoMode = (request.headers.get("cookie") ?? "").includes("financa_demo=1");
+  if (demoMode) {
+    return NextResponse.json({
+      stores: [
+        {
+          id: "demo-s1",
+          name: "Capitinha",
+          credit_limit: 2000,
+          used: 1000,
+          available: 1000,
+          holder: "Victor Emanuel",
+          holderId: "demo-m1",
+          backgroundImage: "",
+        },
+        {
+          id: "demo-s2",
+          name: "Farmácia São João",
+          credit_limit: 2000,
+          used: 850,
+          available: 1150,
+          holder: "Emilly Andrade",
+          holderId: "demo-m2",
+          backgroundImage: "",
+        },
+        {
+          id: "demo-s3",
+          name: "Loja Center",
+          credit_limit: 1500,
+          used: 300,
+          available: 1200,
+          holder: "Victor Emanuel",
+          holderId: "demo-m1",
+          backgroundImage: "",
+        },
+      ],
+    });
+  }
   const { supabase, userId, membership } = await context();
   if (!userId) return NextResponse.json({ message: "Não autorizado." }, { status: 401 });
   if (!membership) return NextResponse.json({ stores: [] });
