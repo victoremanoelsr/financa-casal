@@ -1412,7 +1412,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   position: absolute;
   z-index: 50;
   top: 50px;
-  right: 0;
+  left: 0;
   width: 280px;
   padding: 16px;
   border: 1px solid #e2e8ec;
@@ -2831,7 +2831,7 @@ input:checked + .slider:before {
   position: absolute;
   z-index: 50;
   top: 48px;
-  right: 0;
+  left: 0;
   width: 260px;
   padding: 14px;
   border: 1px solid #e2e8ec;
@@ -9426,6 +9426,115 @@ input:checked + .slider:before {
     width: 100% !important;
     max-width: 100% !important;
     box-sizing: border-box !important;
+  }
+
+  /* =========================================================================
+     PERFECT MOBILE MONTH/YEAR FILTER MODAL (NEVER CUT OFF)
+     ========================================================================= */
+  .dashboard-period-popover,
+  .period-popover-menu,
+  .sub-period-popover {
+    position: fixed !important;
+    top: 50% !important;
+    left: 50% !important;
+    transform: translate(-50%, -50%) !important;
+    right: auto !important;
+    bottom: auto !important;
+    width: min(320px, calc(100vw - 32px)) !important;
+    max-width: calc(100vw - 32px) !important;
+    box-sizing: border-box !important;
+    padding: 20px 18px !important;
+    border-radius: 20px !important;
+    background: #ffffff !important;
+    border: 1px solid #e2e8ec !important;
+    box-shadow: 0 20px 60px rgba(9, 30, 40, 0.4) !important;
+    z-index: 999999 !important;
+    margin: 0 !important;
+    animation: modal-in 0.2s ease-out !important;
+  }
+
+  /* Full screen dark backdrop behind popover on mobile */
+  .dashboard-period-popover::before,
+  .period-popover-menu::before,
+  .sub-period-popover::before {
+    content: "" !important;
+    position: fixed !important;
+    inset: 0 !important;
+    width: 100vw !important;
+    height: 100vh !important;
+    background: rgba(8, 26, 33, 0.65) !important;
+    backdrop-filter: blur(4px) !important;
+    -webkit-backdrop-filter: blur(4px) !important;
+    z-index: -1 !important;
+    pointer-events: auto !important;
+  }
+
+  .popover-fields,
+  .popover-grid {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
+    gap: 12px !important;
+    width: 100% !important;
+    margin-bottom: 16px !important;
+  }
+
+  .popover-fields label,
+  .popover-grid label {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 6px !important;
+    width: 100% !important;
+    min-width: 0 !important;
+  }
+
+  .popover-fields label span,
+  .popover-grid label span {
+    font-size: 11px !important;
+    font-weight: 800 !important;
+    color: #64748b !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.5px !important;
+    display: block !important;
+  }
+
+  .popover-fields select,
+  .popover-grid select {
+    width: 100% !important;
+    height: 46px !important;
+    min-height: 46px !important;
+    padding: 0 10px !important;
+    border: 1.5px solid #dde5ea !important;
+    border-radius: 12px !important;
+    background: #f8fafc !important;
+    font-size: 16px !important; /* 16px prevents iOS Safari from zooming and cutting view */
+    font-weight: 600 !important;
+    color: #0f172a !important;
+    outline: none !important;
+    box-sizing: border-box !important;
+    cursor: pointer !important;
+  }
+
+  .popover-fields select:focus,
+  .popover-grid select:focus {
+    border-color: #00c882 !important;
+    background: #ffffff !important;
+  }
+
+  .popover-apply-btn,
+  .popover-close-btn {
+    width: 100% !important;
+    height: 44px !important;
+    border: 0 !important;
+    border-radius: 12px !important;
+    background: linear-gradient(135deg, #00c882, #00a86b) !important;
+    color: #ffffff !important;
+    font-size: 14px !important;
+    font-weight: 750 !important;
+    cursor: pointer !important;
+    box-shadow: 0 4px 14px rgba(0, 200, 130, 0.3) !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
   }
 
   /* Ensure no element overflows the mobile viewport width */
