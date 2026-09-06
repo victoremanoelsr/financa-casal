@@ -10,7 +10,59 @@ const schema = z.object({
   icon: z.string().trim().max(40).optional().default("target"),
 });
 
-export async function GET() {
+export async function GET(request: Request) {
+  const demoMode = (request.headers.get("cookie") ?? "").includes("financa_demo=1");
+  if (demoMode) {
+    return NextResponse.json({
+      goals: [
+        {
+          id: "demo-g1",
+          name: "Viagem de fim de ano",
+          target: 5000,
+          saved: 2000,
+          deadline: "2026-12-20",
+          description: "Economizar para férias em família",
+          icon: "travel",
+          color: "#2563eb",
+          status: "active",
+        },
+        {
+          id: "demo-g2",
+          name: "Reserva de emergência",
+          target: 10000,
+          saved: 2500,
+          deadline: "2027-06-30",
+          description: "Fundo de segurança equivalente a 6 meses",
+          icon: "reserve",
+          color: "#00ba78",
+          status: "active",
+        },
+        {
+          id: "demo-g3",
+          name: "Reforma da casa",
+          target: 8000,
+          saved: 6000,
+          deadline: "2026-11-15",
+          description: "Pintura geral e novos móveis para a sala",
+          icon: "home",
+          color: "#8b5cf6",
+          status: "active",
+        },
+        {
+          id: "demo-g4",
+          name: "Comprar celular",
+          target: 3000,
+          saved: 1200,
+          deadline: "2026-09-30",
+          description: "Troca do aparelho para trabalho",
+          icon: "device",
+          color: "#f59e0b",
+          status: "active",
+        },
+      ],
+    });
+  }
+
   const { supabase, userId, familyId } = await getFamilyContext();
   if (!userId)
     return NextResponse.json({ message: "Não autorizado." }, { status: 401 });
@@ -55,7 +107,7 @@ export async function GET() {
       deadline: row.deadline,
       description: row.description,
       icon: row.icon || "target",
-      color: row.color || "#16A085",
+      color: row.color || "#00ba78",
       status: row.status,
     })),
   });
@@ -77,6 +129,18 @@ export async function POST(request: Request) {
       { status: 400 },
     );
   const { name, target, deadline, description, icon } = parsed.data;
+  
+  const iconColorMap: Record<string, string> = {
+    travel: "#2563eb",
+    reserve: "#00ba78",
+    home: "#8b5cf6",
+    vehicle: "#0f8b8d",
+    device: "#f59e0b",
+    event: "#ec4899",
+    target: "#64748b",
+  };
+  const color = iconColorMap[icon] || "#00ba78";
+
   const { error } = await supabase
     .from("goals")
     .insert({
@@ -86,7 +150,7 @@ export async function POST(request: Request) {
       deadline: deadline || null,
       description,
       icon,
-      color: "#16A085",
+      color,
       created_by: userId,
     });
   if (error)

@@ -13,6 +13,11 @@ export async function POST(
   request: Request,
   context: { params: Promise<{ id: string }> },
 ) {
+  const demoMode = (request.headers.get("cookie") ?? "").includes("financa_demo=1");
+  if (demoMode) {
+    return NextResponse.json({ ok: true }, { status: 201 });
+  }
+
   const { supabase, userId, familyId } = await getFamilyContext();
   if (!userId)
     return NextResponse.json({ message: "Não autorizado." }, { status: 401 });

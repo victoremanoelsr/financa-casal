@@ -82,25 +82,6 @@ const MONTH_NAMES = [
   "Dezembro",
 ];
 
-function getStoreTheme(name: string) {
-  const check = name.toLowerCase();
-  if (check.includes("capitinha")) return "theme-green";
-  if (
-    check.includes("farmácia") ||
-    check.includes("farmacia") ||
-    check.includes("são joão") ||
-    check.includes("sao joao")
-  )
-    return "theme-blue";
-  if (
-    check.includes("loja") ||
-    check.includes("center") ||
-    check.includes("roupa")
-  )
-    return "theme-purple";
-  return "theme-green";
-}
-
 function getPurchaseCategoryIcon(description: string) {
   const check = description.toLowerCase();
   if (
@@ -108,15 +89,31 @@ function getPurchaseCategoryIcon(description: string) {
     check.includes("remedio") ||
     check.includes("farmacia")
   ) {
-    return <ShoppingBag size={18} color="#00ba78" />;
+    return (
+      <div className="store-purchase-icon green">
+        <ShoppingBag size={18} />
+      </div>
+    );
   }
   if (check.includes("dipirona") || check.includes("comprimido")) {
-    return <Pill size={18} color="#2563eb" />;
+    return (
+      <div className="store-purchase-icon blue">
+        <Pill size={18} />
+      </div>
+    );
   }
-  if (check.includes("higiene") || check.includes("creme")) {
-    return <ShoppingBag size={18} color="#a855f7" />;
+  if (check.includes("higiene") || check.includes("creme") || check.includes("dental")) {
+    return (
+      <div className="store-purchase-icon purple">
+        <ShoppingBag size={18} />
+      </div>
+    );
   }
-  return <Plus size={18} color="#ef4444" />;
+  return (
+    <div className="store-purchase-icon red">
+      <Plus size={18} />
+    </div>
+  );
 }
 
 export default function StoreDetailPage({
@@ -228,11 +225,10 @@ export default function StoreDetailPage({
   const percent = store.limit
     ? Math.min(100, Math.round((store.used / store.limit) * 100))
     : 0;
-  const themeClass = getStoreTheme(store.name);
 
   return (
     <div className="store-details-page-vibrant">
-      {/* TOPO DE NAVEGAÇÃO: VOLTAR E AÇÕES */}
+      {/* TOPO DE NAVEGAÇÃO: BOTÃO VOLTAR E MENU DE 3 PONTINHOS */}
       <div className="card-details-top-nav">
         <Link href="/comercios" className="card-back-btn">
           <ArrowLeft size={18} /> Detalhes do comércio
@@ -240,125 +236,191 @@ export default function StoreDetailPage({
         <button
           type="button"
           className="cards-notification-btn"
-          onClick={() => setOpen(true)}
-          aria-label="Adicionar compra"
+          onClick={() => setEditingStoreModal(true)}
+          aria-label="Opções"
         >
-          <Plus size={18} />
+          <MoreVertical size={18} />
         </button>
       </div>
 
-      {/* HERO COVER DO COMÉRCIO */}
-      <div className={`store-details-hero ${themeClass}`}>
-        <div className="store-card-hero-head">
-          <div className="store-hero-left">
-            <div className="store-logo-circle">
-              {store.backgroundImage ? (
-                <img src={store.backgroundImage} alt={store.name} />
-              ) : (
-                <div className="store-logo-placeholder">
-                  {store.name.includes("Farmácia") ? (
-                    <span style={{ color: "#e53935", fontSize: "22px" }}>+</span>
-                  ) : store.name.includes("Capitinha") ? (
-                    <span style={{ color: "#00897b", fontSize: "16px" }}>CAP</span>
-                  ) : (
-                    <ShoppingBag size={24} color="#5e35b1" />
-                  )}
-                </div>
-              )}
+      {/* HERO COVER DO COMÉRCIO (ESTILO FARMÁCIA SÃO JOÃO / CAPITINHA) */}
+      <div className="store-details-hero-card">
+        {store.backgroundImage && (
+          <div
+            className="store-details-hero-bg"
+            style={{ backgroundImage: `url(${store.backgroundImage})` }}
+          />
+        )}
+
+        <div className="store-details-hero-content">
+          <div className="store-details-hero-top">
+            <div className="store-details-hero-brand">
+              <div className="store-details-logo-wrap">
+                {store.backgroundImage ? (
+                  <img src={store.backgroundImage} alt={store.name} />
+                ) : store.name.includes("Farmácia") ? (
+                  <div
+                    style={{
+                      display: "flex",
+                      flexDirection: "column",
+                      alignItems: "center",
+                      justifyContent: "center",
+                    }}
+                  >
+                    <span
+                      style={{
+                        color: "#00ba78",
+                        fontSize: "26px",
+                        fontWeight: "900",
+                        lineHeight: 1,
+                      }}
+                    >
+                      +
+                    </span>
+                    <span
+                      style={{
+                        color: "#0f4235",
+                        fontSize: "7px",
+                        fontWeight: "900",
+                        textAlign: "center",
+                        lineHeight: 1,
+                        marginTop: 2,
+                      }}
+                    >
+                      FARMÁCIA
+                      <br />
+                      SÃO JOÃO
+                    </span>
+                  </div>
+                ) : store.name.includes("Capitinha") ? (
+                  <div
+                    style={{
+                      display: "flex",
+                      flexDirection: "column",
+                      alignItems: "center",
+                      justifyContent: "center",
+                    }}
+                  >
+                    <span
+                      style={{
+                        color: "#0f8b8d",
+                        fontSize: "14px",
+                        fontWeight: "900",
+                      }}
+                    >
+                      CAP
+                    </span>
+                  </div>
+                ) : (
+                  <ShoppingBag size={24} color="#00ba78" />
+                )}
+              </div>
+
+              <div className="store-details-hero-text">
+                <h1>{store.name}</h1>
+                <small>{store.type || "Crediário"}</small>
+                <p>
+                  <User size={13} style={{ display: "inline" }} />
+                  Titular: <strong>{store.holder}</strong>
+                </p>
+              </div>
             </div>
-            <div className="store-hero-text">
-              <h2>{store.name}</h2>
-              <small>{store.type || "Crediário"}</small>
-              <p>
-                <User size={12} style={{ display: "inline", marginRight: 4 }} />
-                Titular: <strong>{store.holder}</strong>
-              </p>
+
+            <div className="store-details-store-badge-icon">
+              <Store size={18} />
             </div>
           </div>
-          <button
-            type="button"
-            className="store-edit-icon-btn"
-            onClick={() => setEditingStoreModal(true)}
-            aria-label="Opções"
-          >
-            <MoreVertical size={16} />
-          </button>
-        </div>
 
-        {/* CAIXA BRANCA COM AS 3 MÉTRICAS E BARRA */}
-        <div className="store-metrics-box-white">
-          <div className="store-metrics-row">
-            <div className="store-metric-item">
-              <span>Limite total</span>
-              <strong>{formatCurrency(store.limit)}</strong>
+          {/* CAIXA BRANCA DE MÉTRICAS */}
+          <div className="store-details-metrics-box">
+            <div className="store-details-metrics-row">
+              <div className="store-details-metric-col">
+                <span>Limite total</span>
+                <strong>{formatCurrency(store.limit)}</strong>
+              </div>
+              <div className="store-details-metric-col">
+                <span>Utilizado</span>
+                <strong>{formatCurrency(store.used)}</strong>
+              </div>
+              <div className="store-details-metric-col">
+                <span>Disponível</span>
+                <strong className="green-val">
+                  {formatCurrency(Math.max(0, store.limit - store.used))}
+                </strong>
+              </div>
             </div>
-            <div className="store-metric-item">
-              <span>Utilizado</span>
-              <strong>{formatCurrency(store.used)}</strong>
-            </div>
-            <div className="store-metric-item">
-              <span>Disponível</span>
-              <strong className="green-text">
-                {formatCurrency(Math.max(0, store.limit - store.used))}
-              </strong>
-            </div>
-          </div>
 
-          <div className="store-progress-track">
-            <div
-              className="store-progress-fill"
-              style={{ width: `${percent}%` }}
-            />
-          </div>
+            <div className="store-details-progress-bar">
+              <div
+                className="store-details-progress-fill"
+                style={{ width: `${percent}%` }}
+              />
+            </div>
 
-          <div className="store-card-footer-action">
-            <span>{percent}% do limite utilizado</span>
+            <span className="store-details-usage-label">
+              {percent}% do limite utilizado
+            </span>
           </div>
         </div>
       </div>
 
       {/* CARD: INFORMAÇÕES DO COMÉRCIO */}
-      <div className="card-info-table-card">
+      <div className="store-details-info-card">
         <h2>Informações do comércio</h2>
-        <div className="info-rows-list">
-          <div className="info-data-row">
-            <span className="store-info-row-with-icon">
-              <Calendar size={15} /> Data limite
-            </span>
-            <strong>
+        <div className="store-info-list">
+          <div className="store-info-item">
+            <div className="store-info-label-group">
+              <Calendar size={15} />
+              <span>Data limite</span>
+            </div>
+            <strong className="store-info-value">
               {store.dueDateNote || "Não possui data de vencimento"}
             </strong>
           </div>
-          <div className="info-data-row">
-            <span className="store-info-row-with-icon">
-              <User size={15} /> Titular
-            </span>
-            <strong>{store.holder}</strong>
+
+          <div className="store-info-item">
+            <div className="store-info-label-group">
+              <User size={15} />
+              <span>Titular</span>
+            </div>
+            <strong className="store-info-value">{store.holder}</strong>
           </div>
-          <div className="info-data-row">
-            <span className="store-info-row-with-icon">
-              <Store size={15} /> Tipo
-            </span>
-            <strong>{store.type || "Crediário"}</strong>
+
+          <div className="store-info-item">
+            <div className="store-info-label-group">
+              <Store size={15} />
+              <span>Tipo</span>
+            </div>
+            <strong className="store-info-value">
+              {store.type || "Crediário"}
+            </strong>
           </div>
-          <div className="info-data-row">
-            <span className="store-info-row-with-icon">
-              <MapPin size={15} /> Endereço
-            </span>
-            <strong>{store.address || "Rua das Flores, 123 - Centro"}</strong>
+
+          <div className="store-info-item">
+            <div className="store-info-label-group">
+              <MapPin size={15} />
+              <span>Endereço</span>
+            </div>
+            <strong className="store-info-value">
+              {store.address || "Rua das Flores, 123 - Centro"}
+            </strong>
           </div>
-          <div className="info-data-row">
-            <span className="store-info-row-with-icon">
-              <Phone size={15} /> Telefone
-            </span>
-            <strong>{store.phone || "(48) 3333-4444"}</strong>
+
+          <div className="store-info-item">
+            <div className="store-info-label-group">
+              <Phone size={15} />
+              <span>Telefone</span>
+            </div>
+            <strong className="store-info-value">
+              {store.phone || "(48) 3333-4444"}
+            </strong>
           </div>
         </div>
       </div>
 
       {/* SEÇÃO: COMPRAS DO COMÉRCIO COM SELETOR DE MÊS */}
-      <div className="card-purchases-card">
-        <div className="card-purchases-header">
+      <div className="store-details-purchases-card">
+        <div className="store-purchases-head">
           <h2>Compras do comércio</h2>
           <div className="period-dropdown-box">
             <button
@@ -423,7 +485,7 @@ export default function StoreDetailPage({
             description="Use o botão de adicionar para registrar compras."
           />
         ) : (
-          <div className="purchases-list-vibrant">
+          <div className="store-purchases-list">
             {purchases.map((purchase) => {
               const isExpanded = expanded === purchase.id;
               const statusPillClass =
@@ -444,23 +506,11 @@ export default function StoreDetailPage({
                       : "Em aberto";
 
               return (
-                <div
-                  className="purchase-item-vibrant"
-                  key={purchase.id}
-                  style={{ flexDirection: "column", alignItems: "stretch" }}
-                >
-                  <div
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "space-between",
-                    }}
-                  >
-                    <div className="purchase-left-wrap">
-                      <div className="purchase-category-icon">
-                        {getPurchaseCategoryIcon(purchase.description)}
-                      </div>
-                      <div className="purchase-texts">
+                <div className="store-purchase-row-card" key={purchase.id}>
+                  <div className="store-purchase-main-line">
+                    <div className="store-purchase-icon-title">
+                      {getPurchaseCategoryIcon(purchase.description)}
+                      <div className="store-purchase-meta">
                         <strong>{purchase.description}</strong>
                         <small>
                           {formatDate(purchase.date)} ·{" "}
@@ -469,13 +519,15 @@ export default function StoreDetailPage({
                       </div>
                     </div>
 
-                    <div className="purchase-right-wrap">
-                      <span className={`purchase-status-pill ${statusPillClass}`}>
+                    <div className="store-purchase-right-area">
+                      <span
+                        className={`purchase-status-pill ${statusPillClass}`}
+                      >
                         {statusPillText}
                       </span>
-                      <div className="purchase-price-col">
-                        <b>{formatCurrency(purchase.total)}</b>
-                      </div>
+                      <strong className="store-purchase-price">
+                        {formatCurrency(purchase.total)}
+                      </strong>
                       <button
                         type="button"
                         className="action-icon-btn"
@@ -501,12 +553,13 @@ export default function StoreDetailPage({
                     </div>
                   </div>
 
-                  {/* CAIXA DE DETALHAMENTO QUANDO EXPANDIDO OU QUANDO É PARCIAL */}
+                  {/* CAIXA DE DETALHAMENTO QUANDO É PARCIAL OU EXPANDIDO */}
                   {purchase.status === "partial" && !isExpanded && (
-                    <div className="purchase-expand-details-box">
-                      <div className="purchase-breakdown-line">
+                    <div className="store-purchase-expand-details">
+                      <div className="store-purchase-breakdown-row">
                         <span>
-                          Total: <b>{formatCurrency(purchase.total)}</b>
+                          Total da compra:{" "}
+                          <b>{formatCurrency(purchase.total)}</b>
                         </span>
                         <span>
                           Pago: <b>{formatCurrency(purchase.paid)}</b>
@@ -519,8 +572,8 @@ export default function StoreDetailPage({
                   )}
 
                   {isExpanded && (
-                    <div className="purchase-expand-details-box">
-                      <div className="purchase-breakdown-line">
+                    <div className="store-purchase-expand-details">
+                      <div className="store-purchase-breakdown-row">
                         <span>
                           Total da compra:{" "}
                           <strong>{formatCurrency(purchase.total)}</strong>
@@ -535,10 +588,10 @@ export default function StoreDetailPage({
                       </div>
 
                       {purchase.items.length > 0 && (
-                        <div className="purchase-itemized-list">
+                        <div className="store-purchase-items-accordion">
                           {purchase.items.map((item) => (
                             <div
-                              className="purchase-itemized-row"
+                              className="store-purchase-item-line"
                               key={item.id}
                             >
                               <span>
@@ -572,10 +625,10 @@ export default function StoreDetailPage({
         </span>
       </div>
 
-      {/* BOTÃO EDITAR COMÉRCIO NO RODAPÉ */}
+      {/* BOTÃO EDITAR COMÉRCIO OUTLINE */}
       <button
         type="button"
-        className="btn-card-edit-action"
+        className="btn-edit-store-outline"
         onClick={() => setEditingStoreModal(true)}
       >
         <Pencil size={15} /> Editar comércio

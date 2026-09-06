@@ -169,6 +169,73 @@ export async function POST(
       },
       { status: 400 },
     );
+
+  // Se o pagamento for via saldo (PIX, débito, dinheiro, transferência), verifica se há saldo suficiente na conta
+  if (method !== "credit") {
+    const [{ data: allEntries }, { data: cardLinks }, { data: cardPurchasesData }, { data: allCards }] = await Promise.all([
+      supabase
+        .from("financial_entries")
+        .select("id,kind,amount,status")
+        .eq("family_id", membership.family_id)
+        .eq("status", "posted")
+        .is("archived_at", null)
+        .in("kind", ["income", "expense", "initial_balance"]),
+      supabase
+        .from("card_installments")
+        .select("entry_id,purchase_id")
+        .eq("family_id", membership.family_id),
+      supabase
+        .from("card_purchases")
+        .select("id,payment_type,card_id")
+        .eq("family_id", membership.family_id)
+        .eq("status", "active"),
+      supabase
+        .from("cards")
+        .select("id,card_type")
+        .eq("family_id", membership.family_id)
+        .eq("status", "active"),
+    ]);
+
+    const cardTypesMap = new Map((allCards ?? []).map((c) => [c.id, c.card_type]));
+    const cardPurchaseMap = new Map((cardPurchasesData ?? []).map((p) => [p.id, p]));
+    const cardEntrySet = new Set((cardLinks ?? []).map((l) => l.entry_id));
+    const debitCardEntrySet = new Set(
+      (cardLinks ?? [])
+        .filter((l) => {
+          const purchase = cardPurchaseMap.get(l.purchase_id);
+          return purchase?.payment_type === "debit" || cardTypesMap.get(purchase?.card_id ?? "") === "debit";
+        })
+        .map((l) => l.entry_id),
+    );
+
+    const directBalance = (allEntries ?? [])
+      .filter((entry) => !cardEntrySet.has(entry.id) || debitCardEntrySet.has(entry.id))
+      .reduce((sum, entry) => {
+        const val = Number(entry.amount);
+        return entry.kind === "expense" ? sum - val : sum + val;
+      }, 0);
+
+    const cashPaidEventsTotal = (events ?? [])
+      .filter(
+        (event) =>
+          event.event_type === "bill_payment_recorded" &&
+          !reversed.has(Number(event.id)) &&
+          (event.metadata as { method?: string }).method !== "credit",
+      )
+      .reduce((sum, event) => sum + Number((event.metadata as { amount?: number }).amount ?? 0), 0);
+
+    const currentAccountBalance = Math.round((directBalance - cashPaidEventsTotal) * 100) / 100;
+
+    if (amount > currentAccountBalance) {
+      return NextResponse.json(
+        {
+          message: `Saldo insuficiente na conta para realizar o pagamento (Saldo atual: ${currentAccountBalance.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}).`,
+        },
+        { status: 400 },
+      );
+    }
+  }
+
   if (method === "credit") {
     const { data: card } = await supabase
       .from("cards")

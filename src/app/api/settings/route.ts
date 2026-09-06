@@ -9,7 +9,88 @@ async function authenticatedUser() {
   return { supabase, userId: data?.claims?.sub ? String(data.claims.sub) : null };
 }
 
-export async function GET() {
+export async function GET(request: Request) {
+  const demoMode = (request.headers.get("cookie") ?? "").includes("financa_demo=1");
+  if (demoMode) {
+    return NextResponse.json({
+      profile: {
+        fullName: "VICTOR EMANOEL SILVA RODRIGUES",
+        phone: "(86) 99933-0525",
+        contactEmail: "victoremanoelsr@gmail.com",
+        cpfLast4: "1394",
+        birthDate: "2002-12-06",
+      },
+      address: {
+        postalCode: "64378-000",
+        stateCode: "PI",
+        city: "São Miguel da Baixa Grande",
+        district: "centro",
+        street: "Rua João do Vale",
+        number: "299",
+        complement: "",
+      },
+      username: "victor",
+      family: {
+        id: "fam-demo",
+        name: "Família",
+        joinCode: "FAM-F94A7F",
+        role: "admin",
+      },
+      members: [
+        {
+          id: "m-1",
+          displayName: "VICTOR EMANOEL SILVA RODRIGUES",
+          role: "admin",
+          isCurrentUser: true,
+        },
+        {
+          id: "m-2",
+          displayName: "EMILLY ANDRADE",
+          role: "member",
+          isCurrentUser: false,
+        },
+        {
+          id: "m-3",
+          displayName: "LUCAS SILVA",
+          role: "member",
+          isCurrentUser: false,
+        },
+        {
+          id: "m-4",
+          displayName: "MARIA SILVA",
+          role: "member",
+          isCurrentUser: false,
+        },
+      ],
+      categories: [
+        { id: "c1", name: "Casa", kind: "expense", isSystem: true },
+        { id: "c2", name: "Mercado", kind: "expense", isSystem: true },
+        { id: "c3", name: "Alimentação", kind: "expense", isSystem: true },
+        { id: "c4", name: "Transporte", kind: "expense", isSystem: true },
+        { id: "c5", name: "Saúde", kind: "expense", isSystem: true },
+        { id: "c6", name: "Educação", kind: "expense", isSystem: true },
+        { id: "c7", name: "Lazer", kind: "expense", isSystem: true },
+        { id: "c8", name: "Outros", kind: "expense", isSystem: true },
+        { id: "c9", name: "Salário", kind: "income", isSystem: true },
+        { id: "c10", name: "Renda extra", kind: "income", isSystem: true },
+        { id: "c11", name: "Investimentos", kind: "income", isSystem: true },
+        { id: "c12", name: "Outros", kind: "income", isSystem: true },
+      ],
+      preferences: {
+        theme: "light",
+        notifications: {
+          dueSoon: true,
+          overdue: true,
+          cards: true,
+          goals: false,
+          news: true,
+        },
+        listOrder: "newest",
+        dailySummaryTime: "20:00",
+      },
+    });
+  }
+
   const { supabase, userId } = await authenticatedUser();
   if (!userId) return NextResponse.json({ message: "Não autorizado." }, { status: 401 });
 
@@ -52,6 +133,9 @@ export async function GET() {
 }
 
 export async function PATCH(request: Request) {
+  const demoMode = (request.headers.get("cookie") ?? "").includes("financa_demo=1");
+  if (demoMode) return NextResponse.json({ ok: true });
+
   const { supabase, userId } = await authenticatedUser();
   if (!userId) return NextResponse.json({ message: "Não autorizado." }, { status: 401 });
   const input = await request.json().catch(() => null);
@@ -76,6 +160,9 @@ export async function PATCH(request: Request) {
 }
 
 export async function POST(request: Request) {
+  const demoMode = (request.headers.get("cookie") ?? "").includes("financa_demo=1");
+  if (demoMode) return NextResponse.json({ ok: true });
+
   const { supabase, userId } = await authenticatedUser();
   if (!userId) return NextResponse.json({ message: "Não autorizado." }, { status: 401 });
   const input = await request.json().catch(() => null);

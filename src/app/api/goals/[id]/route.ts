@@ -11,9 +11,98 @@ const updateSchema = z.object({
 });
 
 export async function GET(
-  _request: Request,
+  request: Request,
   context: { params: Promise<{ id: string }> },
 ) {
+  const demoMode = (request.headers.get("cookie") ?? "").includes("financa_demo=1");
+  const { id } = await context.params;
+
+  if (demoMode) {
+    const demoGoals: Record<string, { goal: any; movements: any[] }> = {
+      "demo-g1": {
+        goal: {
+          id: "demo-g1",
+          name: "Viagem de fim de ano",
+          target: 5000,
+          saved: 2000,
+          deadline: "2026-12-20",
+          description: "Economizar para férias em família",
+          icon: "travel",
+          color: "#2563eb",
+          status: "active",
+        },
+        movements: [
+          { id: "m-1", type: "deposit", amount: 1000, date: "2026-09-01", notes: "Depósito inicial" },
+          { id: "m-2", type: "deposit", amount: 1000, date: "2026-09-05", notes: "Economia do mês" },
+        ],
+      },
+      "demo-g2": {
+        goal: {
+          id: "demo-g2",
+          name: "Reserva de emergência",
+          target: 10000,
+          saved: 2500,
+          deadline: "2027-06-30",
+          description: "Fundo de segurança equivalente a 6 meses",
+          icon: "reserve",
+          color: "#00ba78",
+          status: "active",
+        },
+        movements: [
+          { id: "m-3", type: "deposit", amount: 2500, date: "2026-08-15", notes: "Aporte de reserva" },
+        ],
+      },
+      "demo-g3": {
+        goal: {
+          id: "demo-g3",
+          name: "Reforma da casa",
+          target: 8000,
+          saved: 6000,
+          deadline: "2026-11-15",
+          description: "Pintura geral e novos móveis para a sala",
+          icon: "home",
+          color: "#8b5cf6",
+          status: "active",
+        },
+        movements: [
+          { id: "m-4", type: "deposit", amount: 6000, date: "2026-08-20", notes: "Poupança reforma" },
+        ],
+      },
+      "demo-g4": {
+        goal: {
+          id: "demo-g4",
+          name: "Comprar celular",
+          target: 3000,
+          saved: 1200,
+          deadline: "2026-09-30",
+          description: "Troca do aparelho para trabalho",
+          icon: "device",
+          color: "#f59e0b",
+          status: "active",
+        },
+        movements: [
+          { id: "m-5", type: "deposit", amount: 1200, date: "2026-09-02", notes: "Entrada" },
+        ],
+      },
+    };
+
+    const found = demoGoals[id] || {
+      goal: {
+        id,
+        name: "Meta da família",
+        target: 5000,
+        saved: 2000,
+        deadline: "2026-12-31",
+        description: "Objetivo planejado",
+        icon: "target",
+        color: "#00ba78",
+        status: "active",
+      },
+      movements: [],
+    };
+    return NextResponse.json(found);
+  }
+
   const { supabase, userId, familyId } = await getFamilyContext();
   if (!userId)
     return NextResponse.json({ message: "Não autorizado." }, { status: 401 });
@@ -22,7 +111,6 @@ export async function GET(
       { message: "Família não encontrada." },
       { status: 404 },
     );
-  const { id } = await context.params;
   const [goal, movements] = await Promise.all([
     supabase
       .from("goals")
