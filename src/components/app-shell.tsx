@@ -155,7 +155,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <span className="brand-mark">F</span>
             <strong>Finança Familiar</strong>
           </Link>
-          <span aria-hidden="true" />
+          <button
+            className="mobile-header-menu-btn"
+            onClick={() => setMenuOpen(true)}
+            aria-label="Abrir menu"
+          >
+            <Menu size={20} />
+          </button>
         </header>
         {children}
       </section>
