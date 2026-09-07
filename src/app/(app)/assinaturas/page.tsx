@@ -19,6 +19,7 @@ import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Field, Modal } from "@/components/ui";
+import { MonthYearPicker } from "@/components/month-year-picker";
 import { formatCurrency } from "@/lib/format";
 import { useAccount } from "@/lib/use-account";
 
@@ -179,6 +180,7 @@ export default function SubscriptionsPage() {
           paymentMethod: payment,
           cardId: selectedCard?.id ?? null,
           imageUrl,
+          startOption: data.get("startOption") || "current",
         }),
       },
     );
@@ -244,63 +246,10 @@ export default function SubscriptionsPage() {
           </div>
         </div>
 
-        <div className="period-dropdown-box">
-          <button
-            type="button"
-            className="sub-period-btn"
-            onClick={() => setPeriodOpen(!periodOpen)}
-          >
-            <CalendarDays size={15} />
-            <span>
-              {MONTH_NAMES[currentMonthNum - 1]} / {currentYear}
-            </span>
-            <ChevronDown size={14} />
-          </button>
-
-          {periodOpen && (
-            <div className="sub-period-popover">
-              <div className="popover-grid">
-                <label>
-                  <span>Mês</span>
-                  <select
-                    value={currentMonthNum}
-                    onChange={(e) =>
-                      handlePeriodSelect(Number(e.target.value), currentYear)
-                    }
-                  >
-                    {MONTH_NAMES.map((name, index) => (
-                      <option key={index + 1} value={index + 1}>
-                        {name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label>
-                  <span>Ano</span>
-                  <select
-                    value={currentYear}
-                    onChange={(e) =>
-                      handlePeriodSelect(currentMonthNum, Number(e.target.value))
-                    }
-                  >
-                    {[2024, 2025, 2026, 2027, 2028].map((yr) => (
-                      <option key={yr} value={yr}>
-                        {yr}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              </div>
-              <button
-                type="button"
-                className="popover-close-btn"
-                onClick={() => setPeriodOpen(false)}
-              >
-                Concluir
-              </button>
-            </div>
-          )}
-        </div>
+        <MonthYearPicker
+          value={month}
+          onChange={(newMonth) => setMonth(newMonth)}
+        />
       </header>
 
       {/* BOTÃO NOVA ASSINATURA */}
@@ -612,6 +561,19 @@ export default function SubscriptionsPage() {
               </select>
             </Field>
           </div>
+
+          {!editing && (
+            <Field label="Primeira cobrança desta assinatura">
+              <select name="startOption" defaultValue="current">
+                <option value="current">
+                  Cobrar a partir deste mês ({MONTH_NAMES[currentMonthNum - 1]}/{currentYear})
+                </option>
+                <option value="next">
+                  Cobrar apenas a partir do próximo mês ({MONTH_NAMES[currentMonthNum % 12]}/{currentMonthNum === 12 ? currentYear + 1 : currentYear})
+                </option>
+              </select>
+            </Field>
+          )}
 
           {payment === "card" && (
             <Field

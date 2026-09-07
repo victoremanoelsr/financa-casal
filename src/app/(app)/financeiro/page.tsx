@@ -42,6 +42,7 @@ import {
 } from "lucide-react";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
+import { MonthYearPicker } from "@/components/month-year-picker";
 import { formatCurrency, formatDate } from "@/lib/format";
 import { useAccount } from "@/lib/use-account";
 
@@ -340,49 +341,10 @@ export default function FinancePage() {
         </div>
 
         <div className="finance-top-actions">
-          <div className="period-dropdown-box">
-            <button
-              className="period-dropdown-btn"
-              onClick={() => setPeriodOpen(!periodOpen)}
-              aria-expanded={periodOpen}
-            >
-              <CalendarDays size={16} />
-              <span>{MONTHS[monthNumber - 1]} {year}</span>
-              <ChevronDown size={14} />
-            </button>
-
-            {periodOpen && (
-              <div className="period-popover-menu">
-                <div className="popover-grid">
-                  <label>
-                    <span>Mês</span>
-                    <select
-                      value={monthNumber}
-                      onChange={(e) => selectPeriod(Number(e.target.value), year)}
-                    >
-                      {MONTHS.map((name, idx) => (
-                        <option value={idx + 1} key={name}>{name}</option>
-                      ))}
-                    </select>
-                  </label>
-                  <label>
-                    <span>Ano</span>
-                    <select
-                      value={year}
-                      onChange={(e) => selectPeriod(monthNumber, Number(e.target.value))}
-                    >
-                      {years.map((y) => (
-                        <option value={y} key={y}>{y}</option>
-                      ))}
-                    </select>
-                  </label>
-                </div>
-                <button className="popover-close-btn" onClick={() => setPeriodOpen(false)}>
-                  Aplicar
-                </button>
-              </div>
-            )}
-          </div>
+          <MonthYearPicker
+            value={month}
+            onChange={(next) => selectPeriod(Number(next.slice(5, 7)), Number(next.slice(0, 4)))}
+          />
 
           <button className="btn-new-entry" onClick={() => openNewModal("expense")}>
             <Plus size={17} strokeWidth={2.5} />

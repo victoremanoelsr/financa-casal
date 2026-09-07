@@ -242,33 +242,27 @@ export function PageHeader({
   );
 }
 
+import { MonthYearPicker } from "@/components/month-year-picker";
+
 export function PeriodFilter({
   value,
   onChange,
 }: { value?: string; onChange?: (month: string) => void } = {}) {
-  const normalized =
+  const [internal, setInternal] = useState(
     value && /^\d{4}-\d{2}$/.test(value)
       ? value
-      : new Date().toISOString().slice(0, 7);
-  const current = new Date(`${normalized}-01T12:00:00`);
-  const label = new Intl.DateTimeFormat("pt-BR", { month: "long" }).format(
-    current,
+      : new Date().toISOString().slice(0, 7),
   );
+  const currentVal = value ?? internal;
+
   return (
-    <label className="period-filter compact">
-      <CalendarRange />
-      <span>
-        {label.charAt(0).toUpperCase() + label.slice(1)} /{" "}
-        <strong>{current.getFullYear()}</strong>
-      </span>
-      <ChevronDown />
-      <input
-        type="month"
-        value={normalized}
-        onChange={(event) => onChange?.(event.target.value)}
-        aria-label="Selecionar mês e ano"
-      />
-    </label>
+    <MonthYearPicker
+      value={currentVal}
+      onChange={(next) => {
+        setInternal(next);
+        onChange?.(next);
+      }}
+    />
   );
 }
 

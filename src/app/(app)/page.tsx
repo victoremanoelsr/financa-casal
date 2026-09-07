@@ -6,20 +6,33 @@ import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YA
 import { PageHeader } from "@/components/app-shell";
 import { formatCurrency, formatDate } from "@/lib/format";
 
+import { MonthYearPicker } from "@/components/month-year-picker";
+
 type Movement = { id: string; type: "income" | "expense"; title: string; subtitle: string; origin: string; amount: number; date: string; href: string };
-type DashboardData = { userName: string; income: number; expenses: number; previousBalance: number; balance: number; cashFlow: Array<{ day: number; label: string; receitas: number; despesas: number }>; categories: Array<{ name: string; value: number; color: string }>; upcoming: Array<{ id: string; title: string; origin: string; dueDate: string; remaining: number; href: string }>; movements: Movement[] };
-const EMPTY: DashboardData = { userName: "", income: 0, expenses: 0, previousBalance: 0, balance: 0, cashFlow: [], categories: [], upcoming: [], movements: [] };
+type DashboardData = { userName: string; income: number; expenses: number; previousBalance: number; balance: number; pendingBillsTotal: number; cashFlow: Array<{ day: number; label: string; receitas: number; despesas: number }>; categories: Array<{ name: string; value: number; color: string }>; upcoming: Array<{ id: string; title: string; origin: string; dueDate: string; remaining: number; href: string }>; movements: Movement[] };
+const EMPTY: DashboardData = { userName: "", income: 0, expenses: 0, previousBalance: 0, balance: 0, pendingBillsTotal: 0, cashFlow: [], categories: [], upcoming: [], movements: [] };
 const MONTHS = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
 const currentMonth = () => { const now = new Date(); return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`; };
 const iconFor = (origin: string) => origin === "Cartão" ? CreditCard : origin === "Comércio" ? Store : origin === "Assinatura" ? Repeat2 : origin === "Despesa fixa" ? ReceiptText : origin === "Financeiro" ? WalletCards : Landmark;
 
 export default function DashboardPage() {
-  const [data, setData] = useState<DashboardData>(EMPTY); const [month, setMonth] = useState(currentMonth); const [periodOpen, setPeriodOpen] = useState(false); const [loading, setLoading] = useState(true);
-  useEffect(() => { fetch(`/api/dashboard?month=${month}`, { cache: "no-store" }).then(async (response) => response.ok ? response.json() : EMPTY).then(setData).catch(() => setData(EMPTY)).finally(() => setLoading(false)); }, [month]);
-  const [year, monthNumber] = month.split("-").map(Number); const years = useMemo(() => Array.from({ length: 11 }, (_, index) => new Date().getFullYear() - 5 + index), []);
-  const totalCategories = data.categories.reduce((total, item) => total + item.value, 0); let accumulated = 0;
+  const [data, setData] = useState<DashboardData>(EMPTY);
+  const [month, setMonth] = useState(currentMonth);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetch(`/api/dashboard?month=${month}`, { cache: "no-store" })
+      .then(async (response) => response.ok ? response.json() : EMPTY)
+      .then(setData)
+      .catch(() => setData(EMPTY))
+      .finally(() => setLoading(false));
+  }, [month]);
+
+  const [, monthNumber] = month.split("-").map(Number);
+  const totalCategories = data.categories.reduce((total, item) => total + item.value, 0);
+  let accumulated = 0;
   const donut = totalCategories ? `conic-gradient(${data.categories.map((item) => { const start = accumulated; accumulated += item.value / totalCategories * 100; return `${item.color} ${start}% ${accumulated}%`; }).join(",")})` : "#e7edf0";
-  const selectPeriod = (nextMonth: number, nextYear: number) => { setLoading(true); setMonth(`${nextYear}-${String(nextMonth).padStart(2, "0")}`); };
+
   return <div className="dashboard-page">
     <section className="dashboard-header-row">
       <div className="dashboard-greeting">
@@ -27,52 +40,17 @@ export default function DashboardPage() {
         <p>Acompanhe como estão as finanças da sua família.</p>
       </div>
       <div className="dashboard-period">
-        <button
-          className="dashboard-period-btn"
-          onClick={() => setPeriodOpen((open) => !open)}
-          aria-expanded={periodOpen}
-        >
-          <CalendarDays size={16} />
-          <span>{MONTHS[monthNumber - 1]} {year}</span>
-          <ChevronDown size={15} />
-        </button>
-        {periodOpen && (
-          <div className="dashboard-period-popover">
-            <div className="popover-fields">
-              <label>
-                <span>Mês</span>
-                <select
-                  value={monthNumber}
-                  onChange={(event) => selectPeriod(Number(event.target.value), year)}
-                >
-                  {MONTHS.map((name, index) => (
-                    <option value={index + 1} key={name}>
-                      {name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                <span>Ano</span>
-                <select
-                  value={year}
-                  onChange={(event) => selectPeriod(monthNumber, Number(event.target.value))}
-                >
-                  {years.map((item) => (
-                    <option key={item}>{item}</option>
-                  ))}
-                </select>
-              </label>
-            </div>
-            <button className="popover-apply-btn" onClick={() => setPeriodOpen(false)}>
-              Aplicar período
-            </button>
-          </div>
-        )}
+        <MonthYearPicker
+          value={month}
+          onChange={(next) => {
+            setLoading(true);
+            setMonth(next);
+          }}
+        />
       </div>
     </section>
 
-    {/* CARDS PRINCIPAIS: SALDO, ENTRADAS, SAÍDAS */}
+    {/* CARDS PRINCIPAIS: SALDO, RECEITAS, SAÍDAS, A PAGAR */}
     <section className="dashboard-kpis-vibrant" aria-label="Resumo financeiro">
       <article className="kpi-card-vibrant balance">
         <div className="kpi-top">
@@ -95,7 +73,7 @@ export default function DashboardPage() {
             <ArrowDownToLine size={20} strokeWidth={2.2} />
           </span>
           <div className="kpi-meta">
-            <small>Entradas</small>
+            <small>Receitas</small>
             <strong className="income-amount">{formatCurrency(data.income)}</strong>
           </div>
         </div>
@@ -112,8 +90,23 @@ export default function DashboardPage() {
             <strong className="expense-amount">{formatCurrency(data.expenses)}</strong>
           </div>
         </div>
-        <span className="kpi-subtext">Total no mês</span>
+        <span className="kpi-subtext">Total pago no mês</span>
       </article>
+
+      <Link href={`/contas?month=${month}`} className="kpi-card-vibrant pending" style={{ textDecoration: "none" }}>
+        <div className="kpi-top">
+          <span className="kpi-icon-vibrant pending">
+            <ReceiptText size={20} strokeWidth={2.2} />
+          </span>
+          <div className="kpi-meta">
+            <small>A pagar</small>
+            <strong className="pending-amount">{formatCurrency(data.pendingBillsTotal ?? 0)}</strong>
+          </div>
+        </div>
+        <span className="kpi-subtext" style={{ color: "#d97706" }}>
+          Contas do mês →
+        </span>
+      </Link>
     </section>
 
     {/* GRÁFICO 1: RECEITAS E DESPESAS */}

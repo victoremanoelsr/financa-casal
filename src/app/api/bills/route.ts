@@ -86,7 +86,7 @@ export async function GET(request: Request) {
       .eq("card_purchases.status", "active"),
     supabase
       .from("fixed_expenses")
-      .select("id,name,reference_amount,due_day,status,category_id,categories(name)")
+      .select("id,name,reference_amount,due_day,status,notes,category_id,categories(name)")
       .eq("family_id", membership.family_id)
       .eq("status", "active"),
     supabase
@@ -325,49 +325,65 @@ export async function GET(request: Request) {
   // Assinaturas pagas via PIX/Dinheiro/Outro entram em Contas a pagar. Assinaturas em Cartão de Crédito NÃO entram para não duplicar a fatura.
   const { data: activeSubs } = await supabase
     .from("subscriptions")
-    .select("id,name,amount,due_day,payment_method,status")
+    .select("id,name,amount,due_day,payment_method,status,starts_on")
     .eq("family_id", membership.family_id)
     .eq("status", "active")
     .neq("payment_method", "card");
 
-  const subscriptionBills = (activeSubs ?? []).map((item) => {
-    const dueDate = dueDateFor(item.due_day);
-    return enrich(
-      {
-        id: `subscription-${item.id}-${currentMonth}`,
-        type: "subscription" as const,
-        sourceId: item.id,
-        name: item.name,
-        origin: "Assinatura (PIX)",
-        originalDate: `${currentMonth}-01`,
-        dueDate,
-        amount: Number(item.amount),
-        purchases: [],
-      },
-      (remaining) => recurringStatus(dueDate, remaining),
-    );
-  });
-  const fixedBills = (fixedResult.data ?? []).map((item) => {
-    const dueDate = dueDateFor(item.due_day);
-    const catName = Array.isArray(item.categories)
-      ? item.categories[0]?.name
-      : (item.categories as { name?: string } | null)?.name;
-    const isHousing = catName?.toLowerCase().includes("moradia") || item.name.toLowerCase().includes("aluguel") || item.name.toLowerCase().includes("condomínio");
-    return enrich(
-      {
-        id: `fixed-${item.id}-${currentMonth}`,
-        type: (isHousing ? "housing" : "fixed") as "fixed",
-        sourceId: item.id,
-        name: item.name,
-        origin: catName || "Contas da casa",
-        originalDate: `${currentMonth}-01`,
-        dueDate,
-        amount: Number(item.reference_amount),
-        purchases: [],
-      },
-      (remaining) => recurringStatus(dueDate, remaining),
-    );
-  });
+  const subscriptionBills = (activeSubs ?? [])
+    .filter((item) => {
+      if (!item.starts_on) return true;
+      const startMonth = String(item.starts_on).slice(0, 7);
+      return startMonth <= currentMonth;
+    })
+    .map((item) => {
+      const dueDate = dueDateFor(item.due_day);
+      return enrich(
+        {
+          id: `subscription-${item.id}-${currentMonth}`,
+          type: "subscription" as const,
+          sourceId: item.id,
+          name: item.name,
+          origin: "Assinatura (PIX)",
+          originalDate: `${currentMonth}-01`,
+          dueDate,
+          amount: Number(item.amount),
+          purchases: [],
+        },
+        (remaining) => recurringStatus(dueDate, remaining),
+      );
+    });
+  const fixedBills = (fixedResult.data ?? [])
+    .filter((item) => {
+      // Checar se há tag [start:YYYY-MM] em notes
+      const notes = (item as { notes?: string }).notes || "";
+      const match = notes.match(/\[start:(\d{4}-\d{2})\]/);
+      if (match && match[1]) {
+        return match[1] <= currentMonth;
+      }
+      return true;
+    })
+    .map((item) => {
+      const dueDate = dueDateFor(item.due_day);
+      const catName = Array.isArray(item.categories)
+        ? item.categories[0]?.name
+        : (item.categories as { name?: string } | null)?.name;
+      const isHousing = catName?.toLowerCase().includes("moradia") || item.name.toLowerCase().includes("aluguel") || item.name.toLowerCase().includes("condomínio");
+      return enrich(
+        {
+          id: `fixed-${item.id}-${currentMonth}`,
+          type: (isHousing ? "housing" : "fixed") as "fixed",
+          sourceId: item.id,
+          name: item.name,
+          origin: catName || "Contas da casa",
+          originalDate: `${currentMonth}-01`,
+          dueDate,
+          amount: Number(item.reference_amount),
+          purchases: [],
+        },
+        (remaining) => recurringStatus(dueDate, remaining),
+      );
+    });
   const visible = [
     ...cardBills,
     ...storeBills,

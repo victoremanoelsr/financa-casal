@@ -48,6 +48,7 @@ export async function GET(request: Request) {
       expenses: 0,
       previousBalance: 0,
       balance: 0,
+      pendingBillsTotal: 0,
       cashFlow: [],
       categories: [],
       upcoming: [],
@@ -69,6 +70,7 @@ export async function GET(request: Request) {
       expenses: 0,
       previousBalance: 0,
       balance: 0,
+      pendingBillsTotal: 0,
       cashFlow: [],
       categories: [],
       upcoming: [],
@@ -132,12 +134,12 @@ export async function GET(request: Request) {
       .eq("status", "active"),
     supabase
       .from("subscriptions")
-      .select("id,name,amount,due_day,status")
+      .select("id,name,amount,due_day,status,starts_on")
       .eq("family_id", membership.family_id)
       .eq("status", "active"),
     supabase
       .from("fixed_expenses")
-      .select("id,name,reference_amount,due_day,status")
+      .select("id,name,reference_amount,due_day,status,notes")
       .eq("family_id", membership.family_id)
       .eq("status", "active"),
     supabase
@@ -399,9 +401,12 @@ export async function GET(request: Request) {
   const currentAndNext = [
     today.slice(0, 7),
     addCivilDays(today, 10).slice(0, 7),
+    month,
   ];
   for (const reference of [...new Set(currentAndNext)]) {
     for (const item of subscriptions.data ?? []) {
+      const startMonth = item.starts_on ? String(item.starts_on).slice(0, 7) : "";
+      if (startMonth && startMonth > reference) continue;
       const dueDate = monthDate(reference, item.due_day);
       candidates.push({
         id: `subscription-${item.id}-${reference}`,
@@ -414,6 +419,9 @@ export async function GET(request: Request) {
       });
     }
     for (const item of fixedExpenses.data ?? []) {
+      const notes = (item as { notes?: string }).notes || "";
+      const match = notes.match(/\[start:(\d{4}-\d{2})\]/);
+      if (match && match[1] && match[1] > reference) continue;
       const dueDate = monthDate(reference, item.due_day);
       candidates.push({
         id: `fixed-${item.id}-${reference}`,
@@ -426,6 +434,21 @@ export async function GET(request: Request) {
       });
     }
   }
+
+  // Contas a pagar no mês selecionado
+  const monthCandidates = candidates.filter((item) =>
+    item.dueDate.startsWith(month),
+  );
+  const pendingBillsTotal = money(
+    monthCandidates.reduce((sum, item) => {
+      const remaining = Math.max(
+        0,
+        item.amount - paymentAmountFor(events.data ?? [], item.billKey),
+      );
+      return sum + remaining;
+    }, 0),
+  );
+
   const upcoming = candidates
     .map((item) => ({
       id: item.id,
@@ -456,6 +479,7 @@ export async function GET(request: Request) {
       ? firstName.charAt(0) + firstName.slice(1).toLocaleLowerCase("pt-BR")
       : "",
     ...summary,
+    pendingBillsTotal,
     cashFlow: cumulativeCashFlow(cashRows, month),
     categories,
     upcoming,

@@ -11,6 +11,8 @@ const schema = z.object({
   paymentMethod: z.enum(["pix", "card", "cash", "bank_transfer", "other"]),
   cardId: z.string().uuid().nullable().optional(),
   imageUrl: z.string().max(700000).nullable().optional(),
+  startOption: z.enum(["current", "next"]).optional(),
+  startsOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
 });
 const relationName = (value: unknown) =>
   (Array.isArray(value) ? value[0] : value) as {
@@ -181,6 +183,17 @@ export async function POST(request: Request) {
       { status: 400 },
     );
   const input = parsed.data;
+  let startsOn = input.startsOn;
+  if (!startsOn) {
+    const now = new Date();
+    if (input.startOption === "next") {
+      const nextMonthDate = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+      startsOn = `${nextMonthDate.getFullYear()}-${String(nextMonthDate.getMonth() + 1).padStart(2, "0")}-01`;
+    } else {
+      startsOn = now.toISOString().slice(0, 10);
+    }
+  }
+
   const { data: subscription, error } = await supabase
     .from("subscriptions")
     .insert({
@@ -193,7 +206,7 @@ export async function POST(request: Request) {
       payment_method: input.paymentMethod,
       card_id: input.paymentMethod === "card" ? input.cardId : null,
       image_url: input.imageUrl ?? null,
-      starts_on: new Date().toISOString().slice(0, 10),
+      starts_on: startsOn,
       created_by: userId,
     })
     .select("id,starts_on")
