@@ -398,11 +398,21 @@ export async function GET(request: Request) {
         billKey: `store-${installment.id}`,
       });
   }
+  // Gerar meses anteriores (até 6 meses) para capturar pendências não pagas
+  const pastMonths: string[] = [];
+  const [currYear, currMonthNum] = month.split("-").map(Number);
+  for (let offset = 6; offset >= 1; offset--) {
+    const d = new Date(currYear, currMonthNum - 1 - offset, 1);
+    pastMonths.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`);
+  }
+
   const currentAndNext = [
     today.slice(0, 7),
     addCivilDays(today, 10).slice(0, 7),
     month,
   ];
+
+  // Adiciona contas dos meses futuros/atuais
   for (const reference of [...new Set(currentAndNext)]) {
     for (const item of subscriptions.data ?? []) {
       const startMonth = item.starts_on ? String(item.starts_on).slice(0, 7) : "";
@@ -435,9 +445,57 @@ export async function GET(request: Request) {
     }
   }
 
-  // Contas a pagar no mês selecionado
-  const monthCandidates = candidates.filter((item) =>
-    item.dueDate.startsWith(month),
+  // Adiciona contas de meses anteriores se estiverem com saldo pendente (carregadas)
+  for (const pastM of pastMonths) {
+    for (const item of subscriptions.data ?? []) {
+      const startMonth = item.starts_on ? String(item.starts_on).slice(0, 7) : "";
+      if (startMonth && startMonth > pastM) continue;
+      const billKey = `subscription-${item.id}-${pastM}`;
+      const remaining = Math.max(
+        0,
+        Number(item.amount) - paymentAmountFor(events.data ?? [], billKey),
+      );
+      if (remaining > 0) {
+        candidates.push({
+          id: billKey,
+          title: item.name,
+          origin: "Assinatura",
+          dueDate: monthDate(pastM, item.due_day),
+          amount: Number(item.amount),
+          href: "/assinaturas",
+          billKey,
+        });
+      }
+    }
+    for (const item of fixedExpenses.data ?? []) {
+      const notes = (item as { notes?: string }).notes || "";
+      const match = notes.match(/\[start:(\d{4}-\d{2})\]/);
+      if (match && match[1] && match[1] > pastM) continue;
+      const billKey = `fixed-${item.id}-${pastM}`;
+      const remaining = Math.max(
+        0,
+        Number(item.reference_amount) - paymentAmountFor(events.data ?? [], billKey),
+      );
+      if (remaining > 0) {
+        candidates.push({
+          id: billKey,
+          title: item.name,
+          origin: "Despesa fixa",
+          dueDate: monthDate(pastM, item.due_day),
+          amount: Number(item.reference_amount),
+          href: "/despesas-fixas",
+          billKey,
+        });
+      }
+    }
+  }
+
+  // Contas a pagar no mês selecionado (incluindo pendências anteriores não pagas)
+  const monthCandidates = candidates.filter(
+    (item) =>
+      item.dueDate.startsWith(month) ||
+      (item.dueDate < `${month}-01` &&
+        Math.max(0, item.amount - paymentAmountFor(events.data ?? [], item.billKey)) > 0),
   );
   const pendingBillsTotal = money(
     monthCandidates.reduce((sum, item) => {

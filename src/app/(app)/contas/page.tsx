@@ -434,13 +434,25 @@ export default function BillsPage() {
                         </span>
                       </div>
 
-                      <div className="bill-info-right">
+                      <div className="bill-info-right action-inline">
                         <strong className="bill-value-red">
                           {formatCurrency(bill.remaining)}
                         </strong>
                         <span className={`bill-status-badge ${statusInfo.badgeClass}`}>
                           {statusInfo.label}
                         </span>
+                        {bill.remaining > 0 && (
+                          <button
+                            type="button"
+                            className="bills-btn-pay-compact"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              openPayment(bill);
+                            }}
+                          >
+                            Pagar
+                          </button>
+                        )}
                       </div>
                     </div>
                   </div>

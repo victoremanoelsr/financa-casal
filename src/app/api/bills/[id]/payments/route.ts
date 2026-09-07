@@ -60,7 +60,7 @@ export async function POST(
 
   let originalAmount = 0;
   let sourceId = "";
-  let billType: "card" | "store" | "fixed";
+  let billType: "card" | "store" | "fixed" | "subscription";
   if (billKey.startsWith("card-")) {
     sourceId = billKey.slice(5, 41);
     const dueDate = billKey.slice(42);
@@ -128,6 +128,22 @@ export async function POST(
         { status: 404 },
       );
     originalAmount = Number(data.reference_amount);
+  } else if (billKey.startsWith("subscription-")) {
+    sourceId = billKey.slice(13, 49);
+    billType = "subscription";
+    const { data } = await supabase
+      .from("subscriptions")
+      .select("id,amount")
+      .eq("id", sourceId)
+      .eq("family_id", membership.family_id)
+      .eq("status", "active")
+      .maybeSingle();
+    if (!data)
+      return NextResponse.json(
+        { message: "Assinatura não encontrada." },
+        { status: 404 },
+      );
+    originalAmount = Number(data.amount);
   } else
     return NextResponse.json(
       { message: "Tipo de conta inválido." },
@@ -315,6 +331,7 @@ export async function POST(
     card: "card",
     store: "store_installment",
     fixed: "fixed_expense",
+    subscription: "subscription",
   } as const;
   const { error } = await supabase
     .from("audit_events")

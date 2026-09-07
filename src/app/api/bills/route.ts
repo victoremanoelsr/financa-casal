@@ -317,11 +317,22 @@ export async function GET(request: Request) {
       : dueDate < today
         ? ("overdue" as const)
         : ("pending" as const);
-  const dueDateFor = (day: number) => {
-    const [year, month] = currentMonth.split("-").map(Number);
+
+  const getDueDateForMonth = (monthStr: string, day: number) => {
+    const [year, month] = monthStr.split("-").map(Number);
     const last = new Date(year, month, 0).getDate();
-    return `${currentMonth}-${String(Math.min(day, last)).padStart(2, "0")}`;
+    return `${monthStr}-${String(Math.min(day, last)).padStart(2, "0")}`;
   };
+
+  // Gerar lista de meses para verificação de pendências anteriores (até 6 meses antes) + mês atual
+  const pastMonths: string[] = [];
+  const [currYear, currMonthNum] = currentMonth.split("-").map(Number);
+  for (let offset = 6; offset >= 1; offset--) {
+    const d = new Date(currYear, currMonthNum - 1 - offset, 1);
+    const mStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+    pastMonths.push(mStr);
+  }
+
   // Assinaturas pagas via PIX/Dinheiro/Outro entram em Contas a pagar. Assinaturas em Cartão de Crédito NÃO entram para não duplicar a fatura.
   const { data: activeSubs } = await supabase
     .from("subscriptions")
@@ -330,60 +341,118 @@ export async function GET(request: Request) {
     .eq("status", "active")
     .neq("payment_method", "card");
 
-  const subscriptionBills = (activeSubs ?? [])
-    .filter((item) => {
-      if (!item.starts_on) return true;
-      const startMonth = String(item.starts_on).slice(0, 7);
-      return startMonth <= currentMonth;
-    })
-    .map((item) => {
-      const dueDate = dueDateFor(item.due_day);
-      return enrich(
+  const subscriptionBills = (activeSubs ?? []).flatMap((item) => {
+    const startMonth = item.starts_on ? String(item.starts_on).slice(0, 7) : "";
+    const results = [];
+
+    // Checa meses anteriores para carregar se não foi pago
+    for (const m of pastMonths) {
+      if (startMonth && startMonth > m) continue;
+      const dueDate = getDueDateForMonth(m, item.due_day);
+      const pastBill = enrich(
         {
-          id: `subscription-${item.id}-${currentMonth}`,
+          id: `subscription-${item.id}-${m}`,
           type: "subscription" as const,
           sourceId: item.id,
           name: item.name,
           origin: "Assinatura (PIX)",
-          originalDate: `${currentMonth}-01`,
+          originalDate: `${m}-01`,
           dueDate,
           amount: Number(item.amount),
           purchases: [],
         },
         (remaining) => recurringStatus(dueDate, remaining),
       );
-    });
-  const fixedBills = (fixedResult.data ?? [])
-    .filter((item) => {
-      // Checar se há tag [start:YYYY-MM] em notes
-      const notes = (item as { notes?: string }).notes || "";
-      const match = notes.match(/\[start:(\d{4}-\d{2})\]/);
-      if (match && match[1]) {
-        return match[1] <= currentMonth;
+      if (pastBill.remaining > 0) {
+        results.push(pastBill);
       }
-      return true;
-    })
-    .map((item) => {
-      const dueDate = dueDateFor(item.due_day);
-      const catName = Array.isArray(item.categories)
-        ? item.categories[0]?.name
-        : (item.categories as { name?: string } | null)?.name;
-      const isHousing = catName?.toLowerCase().includes("moradia") || item.name.toLowerCase().includes("aluguel") || item.name.toLowerCase().includes("condomínio");
-      return enrich(
+    }
+
+    // Mês atual (se ativo e elegível pela data de início)
+    if (!startMonth || startMonth <= currentMonth) {
+      const dueDate = getDueDateForMonth(currentMonth, item.due_day);
+      results.push(
+        enrich(
+          {
+            id: `subscription-${item.id}-${currentMonth}`,
+            type: "subscription" as const,
+            sourceId: item.id,
+            name: item.name,
+            origin: "Assinatura (PIX)",
+            originalDate: `${currentMonth}-01`,
+            dueDate,
+            amount: Number(item.amount),
+            purchases: [],
+          },
+          (remaining) => recurringStatus(dueDate, remaining),
+        ),
+      );
+    }
+
+    return results;
+  });
+
+  const fixedBills = (fixedResult.data ?? []).flatMap((item) => {
+    const notes = (item as { notes?: string }).notes || "";
+    const match = notes.match(/\[start:(\d{4}-\d{2})\]/);
+    const startMonth = match && match[1] ? match[1] : "";
+    const catName = Array.isArray(item.categories)
+      ? item.categories[0]?.name
+      : (item.categories as { name?: string } | null)?.name;
+    const isHousing =
+      catName?.toLowerCase().includes("moradia") ||
+      item.name.toLowerCase().includes("aluguel") ||
+      item.name.toLowerCase().includes("condomínio");
+
+    const results = [];
+
+    // Checa meses anteriores para carregar se não foi pago
+    for (const m of pastMonths) {
+      if (startMonth && startMonth > m) continue;
+      const dueDate = getDueDateForMonth(m, item.due_day);
+      const pastBill = enrich(
         {
-          id: `fixed-${item.id}-${currentMonth}`,
+          id: `fixed-${item.id}-${m}`,
           type: (isHousing ? "housing" : "fixed") as "fixed",
           sourceId: item.id,
           name: item.name,
           origin: catName || "Contas da casa",
-          originalDate: `${currentMonth}-01`,
+          originalDate: `${m}-01`,
           dueDate,
           amount: Number(item.reference_amount),
           purchases: [],
         },
         (remaining) => recurringStatus(dueDate, remaining),
       );
-    });
+      if (pastBill.remaining > 0) {
+        results.push(pastBill);
+      }
+    }
+
+    // Mês atual
+    if (!startMonth || startMonth <= currentMonth) {
+      const dueDate = getDueDateForMonth(currentMonth, item.due_day);
+      results.push(
+        enrich(
+          {
+            id: `fixed-${item.id}-${currentMonth}`,
+            type: (isHousing ? "housing" : "fixed") as "fixed",
+            sourceId: item.id,
+            name: item.name,
+            origin: catName || "Contas da casa",
+            originalDate: `${currentMonth}-01`,
+            dueDate,
+            amount: Number(item.reference_amount),
+            purchases: [],
+          },
+          (remaining) => recurringStatus(dueDate, remaining),
+        ),
+      );
+    }
+
+    return results;
+  });
+
   const visible = [
     ...cardBills,
     ...storeBills,
