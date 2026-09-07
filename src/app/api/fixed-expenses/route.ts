@@ -32,13 +32,16 @@ export async function POST(request: Request) {
   const input = parsed.data;
 
   let computedNotes = input.notes || "";
-  if (input.startOption === "next" || (input.startsOn && input.startsOn.slice(0, 7) > new Date().toISOString().slice(0, 7))) {
+  if (!computedNotes.includes("[start:")) {
     const now = new Date();
-    const nextDate = new Date(now.getFullYear(), now.getMonth() + 1, 1);
-    const startMonth = input.startsOn ? input.startsOn.slice(0, 7) : `${nextDate.getFullYear()}-${String(nextDate.getMonth() + 1).padStart(2, "0")}`;
-    if (!computedNotes.includes("[start:")) {
-      computedNotes = `[start:${startMonth}] ${computedNotes}`.trim();
+    let startMonth = now.toISOString().slice(0, 7);
+    if (input.startOption === "next") {
+      const nextDate = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+      startMonth = `${nextDate.getFullYear()}-${String(nextDate.getMonth() + 1).padStart(2, "0")}`;
+    } else if (input.startsOn) {
+      startMonth = input.startsOn.slice(0, 7);
     }
+    computedNotes = `[start:${startMonth}] ${computedNotes}`.trim();
   }
 
   const { error } = await supabase.from("fixed_expenses").insert({

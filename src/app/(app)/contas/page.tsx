@@ -201,7 +201,7 @@ export default function BillsPage() {
   const paid = data.bills.reduce((sum, item) => sum + item.paid, 0);
   const totalAmount = data.bills.reduce((sum, item) => sum + item.originalAmount, 0);
 
-  // Status inteligente com regras combinadas (ex: Parcial + Atrasado)
+  // Status inteligente com regras combinadas (ex: Parcial + Atrasado, Em dia, Pendente)
   const getStatusInfo = (bill: Bill) => {
     const today = new Date().toISOString().slice(0, 10);
     const isOverdue = bill.dueDate < today && bill.remaining > 0;
@@ -212,8 +212,8 @@ export default function BillsPage() {
     if (isPartial && isOverdue) return { label: "Parcial • Atrasado", color: "overdue", badgeClass: "badge-overdue" };
     if (isPartial) return { label: "Parcial", color: "partial", badgeClass: "badge-partial" };
     if (isOverdue) return { label: "Atrasado", color: "overdue", badgeClass: "badge-overdue" };
-    if (bill.status === "pending") return { label: "Pendente", color: "pending", badgeClass: "badge-pending" };
-    return { label: "Em aberto", color: "open", badgeClass: "badge-open" };
+    if (bill.dueDate > today) return { label: "Em dia", color: "open", badgeClass: "badge-open" };
+    return { label: "Pendente", color: "pending", badgeClass: "badge-pending" };
   };
 
   async function pay(event: FormEvent<HTMLFormElement>) {
@@ -317,7 +317,7 @@ export default function BillsPage() {
   const cardBills = currentMonthBills.filter((bill) => bill.type === "card");
   const storeBills = currentMonthBills.filter((bill) => bill.type === "store");
   const houseBills = currentMonthBills.filter(
-    (bill) => bill.type === "fixed" || bill.type === "housing" || bill.type === "subscription",
+    (bill) => bill.type === "fixed" || bill.type === "housing",
   );
 
   return (

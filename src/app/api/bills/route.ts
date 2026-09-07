@@ -86,7 +86,7 @@ export async function GET(request: Request) {
       .eq("card_purchases.status", "active"),
     supabase
       .from("fixed_expenses")
-      .select("id,name,reference_amount,due_day,status,notes,category_id,categories(name)")
+      .select("id,name,reference_amount,due_day,status,notes,created_at,category_id,categories(name)")
       .eq("family_id", membership.family_id)
       .eq("status", "active"),
     supabase
@@ -333,69 +333,15 @@ export async function GET(request: Request) {
     pastMonths.push(mStr);
   }
 
-  // Assinaturas pagas via PIX/Dinheiro/Outro entram em Contas a pagar. Assinaturas em Cartão de Crédito NÃO entram para não duplicar a fatura.
-  const { data: activeSubs } = await supabase
-    .from("subscriptions")
-    .select("id,name,amount,due_day,payment_method,status,starts_on")
-    .eq("family_id", membership.family_id)
-    .eq("status", "active")
-    .neq("payment_method", "card");
-
-  const subscriptionBills = (activeSubs ?? []).flatMap((item) => {
-    const startMonth = item.starts_on ? String(item.starts_on).slice(0, 7) : "";
-    const results = [];
-
-    // Checa meses anteriores para carregar se não foi pago
-    for (const m of pastMonths) {
-      if (startMonth && startMonth > m) continue;
-      const dueDate = getDueDateForMonth(m, item.due_day);
-      const pastBill = enrich(
-        {
-          id: `subscription-${item.id}-${m}`,
-          type: "subscription" as const,
-          sourceId: item.id,
-          name: item.name,
-          origin: "Assinatura (PIX)",
-          originalDate: `${m}-01`,
-          dueDate,
-          amount: Number(item.amount),
-          purchases: [],
-        },
-        (remaining) => recurringStatus(dueDate, remaining),
-      );
-      if (pastBill.remaining > 0) {
-        results.push(pastBill);
-      }
-    }
-
-    // Mês atual (se ativo e elegível pela data de início)
-    if (!startMonth || startMonth <= currentMonth) {
-      const dueDate = getDueDateForMonth(currentMonth, item.due_day);
-      results.push(
-        enrich(
-          {
-            id: `subscription-${item.id}-${currentMonth}`,
-            type: "subscription" as const,
-            sourceId: item.id,
-            name: item.name,
-            origin: "Assinatura (PIX)",
-            originalDate: `${currentMonth}-01`,
-            dueDate,
-            amount: Number(item.amount),
-            purchases: [],
-          },
-          (remaining) => recurringStatus(dueDate, remaining),
-        ),
-      );
-    }
-
-    return results;
-  });
-
   const fixedBills = (fixedResult.data ?? []).flatMap((item) => {
     const notes = (item as { notes?: string }).notes || "";
     const match = notes.match(/\[start:(\d{4}-\d{2})\]/);
-    const startMonth = match && match[1] ? match[1] : "";
+    const createdAtMonth = (item as { created_at?: string }).created_at
+      ? String((item as { created_at?: string }).created_at).slice(0, 7)
+      : "";
+    // Se tiver tag [start:YYYY-MM], usa ela; caso contrário, usa o mês de criação para evitar passado fictício
+    const startMonth = match && match[1] ? match[1] : createdAtMonth || currentMonth;
+
     const catName = Array.isArray(item.categories)
       ? item.categories[0]?.name
       : (item.categories as { name?: string } | null)?.name;
@@ -406,9 +352,9 @@ export async function GET(request: Request) {
 
     const results = [];
 
-    // Checa meses anteriores para carregar se não foi pago
+    // Checa meses anteriores SOMENTE a partir do startMonth real (nunca gera contas fictícias antes do início cadastrado)
     for (const m of pastMonths) {
-      if (startMonth && startMonth > m) continue;
+      if (m < startMonth) continue;
       const dueDate = getDueDateForMonth(m, item.due_day);
       const pastBill = enrich(
         {
@@ -429,8 +375,8 @@ export async function GET(request: Request) {
       }
     }
 
-    // Mês atual
-    if (!startMonth || startMonth <= currentMonth) {
+    // Mês atual (somente se o mês atual for igual ou posterior ao startMonth)
+    if (currentMonth >= startMonth) {
       const dueDate = getDueDateForMonth(currentMonth, item.due_day);
       results.push(
         enrich(
@@ -456,7 +402,6 @@ export async function GET(request: Request) {
   const visible = [
     ...cardBills,
     ...storeBills,
-    ...subscriptionBills,
     ...fixedBills,
   ]
     .filter(
@@ -474,8 +419,8 @@ export async function GET(request: Request) {
     groups: {
       cards: totalFor("card"),
       stores: totalFor("store"),
-      subscriptions: totalFor("subscription"),
-      fixed: totalFor("fixed"),
+      subscriptions: 0,
+      fixed: totalFor("fixed") + totalFor("housing"),
     },
   });
 }

@@ -139,7 +139,7 @@ export async function GET(request: Request) {
       .eq("status", "active"),
     supabase
       .from("fixed_expenses")
-      .select("id,name,reference_amount,due_day,status,notes")
+      .select("id,name,reference_amount,due_day,status,notes,created_at")
       .eq("family_id", membership.family_id)
       .eq("status", "active"),
     supabase
@@ -412,26 +412,16 @@ export async function GET(request: Request) {
     month,
   ];
 
-  // Adiciona contas dos meses futuros/atuais
+  // Adiciona contas dos meses futuros/atuais (despesas fixas reais)
   for (const reference of [...new Set(currentAndNext)]) {
-    for (const item of subscriptions.data ?? []) {
-      const startMonth = item.starts_on ? String(item.starts_on).slice(0, 7) : "";
-      if (startMonth && startMonth > reference) continue;
-      const dueDate = monthDate(reference, item.due_day);
-      candidates.push({
-        id: `subscription-${item.id}-${reference}`,
-        title: item.name,
-        origin: "Assinatura",
-        dueDate,
-        amount: Number(item.amount),
-        href: "/assinaturas",
-        billKey: `subscription-${item.id}-${reference}`,
-      });
-    }
     for (const item of fixedExpenses.data ?? []) {
       const notes = (item as { notes?: string }).notes || "";
       const match = notes.match(/\[start:(\d{4}-\d{2})\]/);
-      if (match && match[1] && match[1] > reference) continue;
+      const createdAtMonth = (item as { created_at?: string }).created_at
+        ? String((item as { created_at?: string }).created_at).slice(0, 7)
+        : "";
+      const startMonth = match && match[1] ? match[1] : createdAtMonth || month;
+      if (reference < startMonth) continue;
       const dueDate = monthDate(reference, item.due_day);
       candidates.push({
         id: `fixed-${item.id}-${reference}`,
@@ -446,31 +436,16 @@ export async function GET(request: Request) {
   }
 
   // Adiciona contas de meses anteriores se estiverem com saldo pendente (carregadas)
+  // SOMENTE a partir do startMonth (nunca antes)
   for (const pastM of pastMonths) {
-    for (const item of subscriptions.data ?? []) {
-      const startMonth = item.starts_on ? String(item.starts_on).slice(0, 7) : "";
-      if (startMonth && startMonth > pastM) continue;
-      const billKey = `subscription-${item.id}-${pastM}`;
-      const remaining = Math.max(
-        0,
-        Number(item.amount) - paymentAmountFor(events.data ?? [], billKey),
-      );
-      if (remaining > 0) {
-        candidates.push({
-          id: billKey,
-          title: item.name,
-          origin: "Assinatura",
-          dueDate: monthDate(pastM, item.due_day),
-          amount: Number(item.amount),
-          href: "/assinaturas",
-          billKey,
-        });
-      }
-    }
     for (const item of fixedExpenses.data ?? []) {
       const notes = (item as { notes?: string }).notes || "";
       const match = notes.match(/\[start:(\d{4}-\d{2})\]/);
-      if (match && match[1] && match[1] > pastM) continue;
+      const createdAtMonth = (item as { created_at?: string }).created_at
+        ? String((item as { created_at?: string }).created_at).slice(0, 7)
+        : "";
+      const startMonth = match && match[1] ? match[1] : createdAtMonth || month;
+      if (pastM < startMonth) continue;
       const billKey = `fixed-${item.id}-${pastM}`;
       const remaining = Math.max(
         0,
