@@ -182,51 +182,27 @@ export default function ReportsPage() {
   const [loading, setLoading] = useState(true);
   const [entries, setEntries] = useState<FinancialEntry[]>([]);
   const [bills, setBills] = useState<Bill[]>([]);
+  const [allEntries, setAllEntries] = useState<FinancialEntry[]>([]);
 
   // Carrega dados da competência
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const [resFinance, resBills] = await Promise.all([
+      const [resFinance, resBills, resFinanceAll] = await Promise.all([
         fetch(`/api/finance?month=${selectedMonth}`, { cache: "no-store" }),
         fetch(`/api/bills?month=${selectedMonth}`, { cache: "no-store" }),
+        fetch(`/api/finance?month=all`, { cache: "no-store" }),
       ]);
 
-      const [dataFinance, dataBills] = await Promise.all([
+      const [dataFinance, dataBills, dataFinanceAll] = await Promise.all([
         resFinance.json().catch(() => null),
         resBills.json().catch(() => null),
+        resFinanceAll.json().catch(() => null),
       ]);
 
-      if (resFinance.ok && dataFinance?.entries) {
-        setEntries(dataFinance.entries);
-      } else {
-        // Fallback demo caso não haja entradas cadastradas ainda
-        setEntries([
-          { id: "e1", type: "income", title: "Salário Victor", amount: 2800, date: `${selectedMonth}-01`, category: "Salário", person: "Victor" },
-          { id: "e2", type: "income", title: "Salário Emilly", amount: 2000, date: `${selectedMonth}-05`, category: "Salário", person: "Emilly" },
-          { id: "e3", type: "income", title: "Renda extra", amount: 400, date: `${selectedMonth}-15`, category: "Extra", person: "Outros" },
-          { id: "e4", type: "expense", title: "Aluguel", amount: 1000, date: `${selectedMonth}-05`, category: "Casa", person: "Victor" },
-          { id: "e5", type: "expense", title: "Compra Atacadão", amount: 680.50, date: `${selectedMonth}-08`, category: "Mercado", person: "Emilly" },
-          { id: "e6", type: "expense", title: "Energia", amount: 250, date: `${selectedMonth}-10`, category: "Casa", person: "Victor" },
-          { id: "e7", type: "expense", title: "Farmácia", amount: 180, date: `${selectedMonth}-14`, category: "Comércio", person: "Emilly" },
-          { id: "e8", type: "expense", title: "Jantar fora", amount: 120, date: `${selectedMonth}-12`, category: "Alimentação", person: "Victor" },
-          { id: "e9", type: "expense", title: "Uber", amount: 80, date: `${selectedMonth}-15`, category: "Transporte", person: "Emilly" },
-          { id: "e10", type: "expense", title: "Saúde consulta", amount: 200, date: `${selectedMonth}-18`, category: "Saúde", person: "Victor" },
-          { id: "e11", type: "expense", title: "Lazer cinema", amount: 150, date: `${selectedMonth}-20`, category: "Lazer", person: "Victor" },
-          { id: "e12", type: "expense", title: "Outros gastos", amount: 820, date: `${selectedMonth}-22`, category: "Outros", person: "Outros" },
-        ]);
-      }
-
-      if (resBills.ok && dataBills?.bills) {
-        setBills(dataBills.bills);
-      } else {
-        setBills([
-          { id: "b1", type: "store", sourceId: "s1", name: "Compra Farmácia", origin: "Comércio", originalDate: `${selectedMonth}-03`, dueDate: `${selectedMonth}-25`, amount: 300, originalAmount: 300, paid: 200, remaining: 100, status: "partial" },
-          { id: "b2", type: "fixed", sourceId: "f1", name: "Energia", origin: "Casa", originalDate: `${selectedMonth}-10`, dueDate: `${selectedMonth}-28`, amount: 250, originalAmount: 250, paid: 0, remaining: 250, status: "open" },
-          { id: "b3", type: "fixed", sourceId: "f2", name: "Jantar fora", origin: "Alimentação", originalDate: `${selectedMonth}-12`, dueDate: `${selectedMonth}-12`, amount: 120, originalAmount: 120, paid: 120, remaining: 0, status: "paid" },
-          { id: "b4", type: "fixed", sourceId: "f3", name: "Uber", origin: "Transporte", originalDate: `${selectedMonth}-15`, dueDate: `${selectedMonth}-30`, amount: 80, originalAmount: 80, paid: 40, remaining: 40, status: "partial" },
-        ]);
-      }
+      setEntries(Array.isArray(dataFinance?.entries) ? dataFinance.entries : []);
+      setBills(Array.isArray(dataBills?.bills) ? dataBills.bills : []);
+      setAllEntries(Array.isArray(dataFinanceAll?.entries) ? dataFinanceAll.entries : (Array.isArray(dataFinance?.entries) ? dataFinance.entries : []));
     } catch {
       toast.error("Erro ao carregar dados do relatório.");
     } finally {
@@ -370,19 +346,57 @@ export default function ReportsPage() {
       .sort((a, b) => b.date.localeCompare(a.date));
   }, [filteredEntries]);
 
-  // Histórico dos últimos 6 meses para o Gráfico "Entradas x Despesas"
+  // Histórico dos últimos 6 meses para o Gráfico "Receitas x Despesas"
   const historyData = useMemo(() => {
-    // 6 meses terminando no mês selecionado
-    const months = [
-      { label: "Abr", income: 3200, expense: 1800 },
-      { label: "Mai", income: 3800, expense: 2600 },
-      { label: "Jun", income: 4800, expense: 3300 },
-      { label: "Jul", income: 4900, expense: 3400 },
-      { label: "Ago", income: 4600, expense: 3200 },
-      { label: "Set", income: 5200, expense: 3480.50 },
-    ];
-    return months;
-  }, []);
+    const [selY, selM] = selectedMonth.split("-").map(Number);
+    const monthsList: Array<{ key: string; label: string; income: number; expense: number }> = [];
+
+    // Gerar os 6 meses terminando na competência selecionada
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date(selY, selM - 1 - i, 1);
+      const y = d.getFullYear();
+      const m = d.getMonth() + 1;
+      const key = `${y}-${String(m).padStart(2, "0")}`;
+      const label = MONTH_NAMES[m - 1].slice(0, 3);
+      monthsList.push({ key, label, income: 0, expense: 0 });
+    }
+
+    // Computar com base nas entradas reais (allEntries)
+    for (const entry of allEntries) {
+      const entryMonth = (entry.date || "").slice(0, 7);
+      const target = monthsList.find((item) => item.key === entryMonth);
+      if (target) {
+        if (entry.type === "income") {
+          target.income += entry.amount;
+        } else if (entry.type === "expense") {
+          target.expense += entry.amount;
+        }
+      }
+    }
+
+    return monthsList;
+  }, [selectedMonth, allEntries]);
+
+  // Indicadores do gráfico de histórico
+  const hasHistoryData = useMemo(() => {
+    return historyData.some((d) => d.income > 0 || d.expense > 0);
+  }, [historyData]);
+
+  const maxHistoryVal = useMemo(() => {
+    const highest = Math.max(0, ...historyData.flatMap((d) => [d.income, d.expense]));
+    return highest > 0 ? highest * 1.15 : 1000;
+  }, [historyData]);
+
+  const chartInsight = useMemo(() => {
+    if (!hasHistoryData) {
+      return "Cadastre receitas e despesas para acompanhar o histórico comparativo.";
+    }
+    const surplusMonths = historyData.filter((d) => d.income > d.expense).length;
+    if (surplusMonths === 0) {
+      return "Nos últimos 6 meses com dados, as despesas foram maiores ou iguais às receitas.";
+    }
+    return `Suas receitas superaram as despesas em ${surplusMonths} dos últimos 6 meses.`;
+  }, [hasHistoryData, historyData]);
 
   // Exportar Relatório CSV
   function exportCsv() {
@@ -488,15 +502,15 @@ export default function ReportsPage() {
         </button>
       </div>
 
-      {/* 4 CARDS DE RESUMO: ENTRADAS, DESPESAS, SALDO, EM ABERTO */}
+      {/* 4 CARDS DE RESUMO: RECEITAS, DESPESAS, SALDO, EM ABERTO */}
       <div className="reports-kpi-grid">
-        {/* CARD 1: ENTRADAS */}
+        {/* CARD 1: RECEITAS */}
         <div className="report-kpi-card income">
           <div className="kpi-icon-round green">
             <TrendingUp size={20} />
           </div>
           <div className="kpi-body">
-            <span className="kpi-label">Entradas</span>
+            <span className="kpi-label">Receitas</span>
             <strong className="kpi-val green">{formatCurrency(totalIncome)}</strong>
             <small className="kpi-desc">Total de receitas</small>
           </div>
@@ -524,7 +538,7 @@ export default function ReportsPage() {
             <strong className={`kpi-val ${periodBalance >= 0 ? "teal" : "red"}`}>
               {formatCurrency(periodBalance)}
             </strong>
-            <small className="kpi-desc">Entradas - Despesas</small>
+            <small className="kpi-desc">Receitas - Despesas</small>
           </div>
         </div>
 
@@ -543,11 +557,11 @@ export default function ReportsPage() {
 
       {/* GRID COM GRÁFICO DE BARRAS & GASTOS POR CATEGORIA */}
       <div className="reports-two-col-grid">
-        {/* 1. GRÁFICO ENTRADAS X DESPESAS */}
+        {/* 1. GRÁFICO RECEITAS X DESPESAS */}
         <div className="report-card-panel">
           <div className="panel-header-row">
             <div className="panel-title-with-info">
-              <h2>Entradas x Despesas</h2>
+              <h2>Receitas x Despesas</h2>
               <Info size={15} className="info-icon" />
             </div>
             <div className="panel-range-badge">
@@ -559,7 +573,7 @@ export default function ReportsPage() {
           <div className="chart-legend-row">
             <div className="legend-pill">
               <span className="legend-dot green" />
-              <span>Entradas</span>
+              <span>Receitas</span>
             </div>
             <div className="legend-pill">
               <span className="legend-dot red" />
@@ -568,46 +582,51 @@ export default function ReportsPage() {
           </div>
 
           {/* GRÁFICO DE BARRAS RESPONSIVO */}
-          <div className="bar-chart-container">
-            <div className="bar-chart-y-axis">
-              <span>6k</span>
-              <span>4,5k</span>
-              <span>3k</span>
-              <span>1,5k</span>
-              <span>0</span>
+          {!hasHistoryData ? (
+            <div className="panel-compact-empty" style={{ minHeight: "180px", display: "flex", alignItems: "center", justifyContent: "center" }}>
+              <p>Nenhuma movimentação registrada nos últimos 6 meses.</p>
             </div>
+          ) : (
+            <div className="bar-chart-container">
+              <div className="bar-chart-y-axis">
+                <span>{maxHistoryVal >= 1000 ? `${Math.round(maxHistoryVal / 1000)}k` : Math.round(maxHistoryVal)}</span>
+                <span>{maxHistoryVal >= 1000 ? `${(Math.round(maxHistoryVal * 0.75) / 1000).toFixed(1)}k` : Math.round(maxHistoryVal * 0.75)}</span>
+                <span>{maxHistoryVal >= 1000 ? `${(Math.round(maxHistoryVal * 0.5) / 1000).toFixed(1)}k` : Math.round(maxHistoryVal * 0.5)}</span>
+                <span>{maxHistoryVal >= 1000 ? `${(Math.round(maxHistoryVal * 0.25) / 1000).toFixed(1)}k` : Math.round(maxHistoryVal * 0.25)}</span>
+                <span>0</span>
+              </div>
 
-            <div className="bar-chart-bars-wrap">
-              {historyData.map((d, idx) => {
-                const maxVal = 6000;
-                const incH = Math.min(100, Math.round((d.income / maxVal) * 100));
-                const expH = Math.min(100, Math.round((d.expense / maxVal) * 100));
+              <div className="bar-chart-bars-wrap">
+                {historyData.map((d, idx) => {
+                  const incH = d.income > 0 ? Math.max(4, Math.min(100, Math.round((d.income / maxHistoryVal) * 100))) : 0;
+                  const expH = d.expense > 0 ? Math.max(4, Math.min(100, Math.round((d.expense / maxHistoryVal) * 100))) : 0;
 
-                return (
-                  <div className="bar-group-col" key={idx}>
-                    <div className="bar-pair">
-                      <div
-                        className="single-bar green"
-                        style={{ height: `${incH}%` }}
-                        title={`Entradas: ${formatCurrency(d.income)}`}
-                      />
-                      <div
-                        className="single-bar red"
-                        style={{ height: `${expH}%` }}
-                        title={`Despesas: ${formatCurrency(d.expense)}`}
-                      />
+                  return (
+                    <div className="bar-group-col" key={idx}>
+                      <div className="bar-pair">
+                        <div
+                          className="single-bar green"
+                          style={{ height: `${incH}%` }}
+                          title={`Receitas: ${formatCurrency(d.income)}`}
+                        />
+                        <div
+                          className="single-bar red"
+                          style={{ height: `${expH}%` }}
+                          title={`Despesas: ${formatCurrency(d.expense)}`}
+                        />
+                      </div>
+                      <span className="bar-month-label">{d.label}</span>
                     </div>
-                    <span className="bar-month-label">{d.label}</span>
-                  </div>
-                );
-              })}
+                  );
+                })}
+              </div>
             </div>
-          </div>
+          )}
 
           {/* NOTA DE INSIGHT NO RODAPÉ DO GRÁFICO */}
           <div className="chart-insight-banner">
             <TrendingUp size={16} />
-            <span>Suas entradas superaram as despesas em 3 dos últimos 6 meses.</span>
+            <span>{chartInsight}</span>
           </div>
         </div>
 
@@ -1003,7 +1022,7 @@ export default function ReportsPage() {
                     className={`filter-grid-pill ${typeFilter === "income" ? "active" : ""}`}
                     onClick={() => setTypeFilter("income")}
                   >
-                    Entradas
+                    Receitas
                   </button>
                   <button
                     type="button"
